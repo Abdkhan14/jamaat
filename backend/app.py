@@ -1,5 +1,8 @@
 from flask import Flask, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
+import httpx
+import asyncio
+from bs4 import BeautifulSoup
 from config import Config
 from models.prayerTimes import db, PrayerTimes
 from mosques import MOSQUES
@@ -30,9 +33,44 @@ def create_app():
 
         return jsonify(result)
 
-    def mock_scrape_and_update():
+    async def scrape_mosque(client, mosque):
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/115.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+
+        try:
+            response = await client.get(mosque["website"], timeout=20.0, headers=headers)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+            text = soup.get_text(separator="\n", strip=True)
+            return {
+                "mosque": mosque["name"],
+                "url": mosque["website"],
+                "status": "success",
+                "preview": text[:200]
+            }
+        except Exception as e:
+            return {
+                "mosque": mosque["name"],
+                "url": mosque["website"],
+                "status": "error",
+                "message": str(e)
+            }
+
+    async def scrape_all_mosques():
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            tasks = [scrape_mosque(client, m) for m in MOSQUES]
+            return await asyncio.gather(*tasks)
+
+    def scrape_and_update():
         with app.app_context():
             print("Mock job running: scraping + LLM simulation...")
+
+            scraped_results = asyncio.run(scrape_all_mosques())
 
             # Just overwrite the table for now
             PrayerTimes.query.delete()
@@ -82,7 +120,7 @@ def create_app():
 
     # --- Scheduler setup ---
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=mock_scrape_and_update, trigger="interval", hours=12)
+    scheduler.add_job(func=scrape_and_update, trigger="interval", seconds=10)
     scheduler.start()
 
     # Ensure scheduler shuts down with Flask
