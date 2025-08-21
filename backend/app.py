@@ -14,23 +14,31 @@ import atexit
 import json
 from openai import OpenAI
 
+# Load environment variables from a .env file
 load_dotenv()
 
-# Initialize OpenAI client
+# Initialize OpenAI client with API key from environment
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 def create_app():
+    # Create Flask app instance
     app = Flask(__name__)
+    # Load configuration from Config object
     app.config.from_object(Config)
 
+    # Initialize SQLAlchemy with Flask app
     db.init_app(app)
 
+    # Define route to get all prayer times
     @app.route("/prayer-times", methods=["GET"])
     def get_prayer_times():
+        # Query all prayer times from the database
         times = PrayerTimes.query.all()
+        # Serialize each PrayerTimes object to dict
         times_serialized = [t.to_dict() for t in times]
         result = []
 
+        # Merge mosque info with corresponding prayer times
         for t in times_serialized:
             mosque = next((m for m in MOSQUES if m["name"] == t["mosque_name"]), None)
             if mosque:
@@ -41,12 +49,14 @@ def create_app():
                     }
                 )
 
+        # Return the result as JSON
         return jsonify(result)
 
+    # Function to call the OpenAI LLM with a prompt and return parsed JSON
     def call_llm(prompt: str):
         try:
             response = client.chat.completions.create(
-                model="gpt-4o",  # fast & cheaper model; you can use "gpt-4o" too
+                model="gpt-4o", 
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that only outputs valid JSON objects."},
                     {"role": "user", "content": prompt},
@@ -54,15 +64,17 @@ def create_app():
                 max_tokens=500,
                 temperature=0.0,
                 top_p=1.0,
-                response_format={"type": "json_object"},  # ✅ ensures valid JSON
+                response_format={"type": "json_object"}, 
             )
 
             choice = response.choices[0].message.content
             return json.loads(choice)
 
         except Exception as e:
+            # Return None if any error occurs
             return None
 
+    # Asynchronous function to scrape a single mosque's website
     async def scrape_mosque(client, mosque):
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -73,8 +85,10 @@ def create_app():
         }
 
         try:
+            # Fetch the mosque's website with a timeout and custom headers
             response = await client.get(mosque["website"], timeout=120.0, headers=headers)
             response.raise_for_status()
+            # Parse HTML and extract all text
             soup = BeautifulSoup(response.text, "html.parser")
             text = soup.get_text(separator="\n", strip=True)
             return {
@@ -82,13 +96,16 @@ def create_app():
                 "raw_text": text
             }
         except Exception as e:
+            # Return None if scraping fails
             return None
 
+    # Asynchronous function to scrape all mosques in parallel
     async def scrape_all_mosques():
         async with httpx.AsyncClient(follow_redirects=True) as client:
             tasks = [scrape_mosque(client, m) for m in MOSQUES]
             return await asyncio.gather(*tasks)
 
+    # Helper function to parse and format time strings
     def format_time(value):
         if not value or value.strip().lower() in ["null", "none"] :
             return None
@@ -99,6 +116,7 @@ def create_app():
         except ValueError:
             return None
 
+    # Normalize prayer times to ensure correct start/iqamah assignment
     def normalize_prayer_times(prayer_json):
         def normalize_pair(start, iqamah):
             start_t, iqamah_t = format_time(start), format_time(iqamah)
@@ -117,7 +135,7 @@ def create_app():
             # Case 3: both null → leave as is
             return start, iqamah
 
-        # Apply to all 5 daily prayers
+        # Apply normalization to all 5 daily prayers
         for p in ["fajr", "zuhr", "asr", "maghrib", "isha"]:
             start_key, iqamah_key = f"{p}_start", f"{p}_iqamah"
             prayer_json[start_key], prayer_json[iqamah_key] = normalize_pair(
@@ -126,15 +144,18 @@ def create_app():
 
         return prayer_json
 
+    # Main function to scrape, extract, normalize, and update prayer times in the database
     def scrape_and_update():
         with app.app_context():
             print("Mock job running: scraping + LLM simulation...")
 
             records = []
+            # Scrape all mosques asynchronously
             scraped_results = asyncio.run(scrape_all_mosques())
             for result in scraped_results:
                 if result: 
                     raw_text = result["raw_text"]
+                    # Compose prompt for LLM to extract prayer times
                     prompt = f"""
                     Extract the prayer times from the following text.
 
@@ -213,11 +234,14 @@ def create_app():
                     ---
                     """
                     
+                    # Call LLM to extract prayer times from raw text
                     llm_response_json = call_llm(prompt)
 
                     if llm_response_json: 
+                        # Normalize the LLM response for consistency
                         normalized_llm_response = normalize_prayer_times(llm_response_json)
 
+                        # Create a new PrayerTimes record from normalized data
                         records.append(
                             PrayerTimes(
                                 mosque_name=result["name"],
@@ -242,7 +266,7 @@ def create_app():
                             ),
                         )
 
-            
+            # Merge (upsert) all new records into the database
             for record in records:
                 db.session.merge(record) 
             db.session.commit()
@@ -250,6 +274,7 @@ def create_app():
             print("Mock job finished: data updated.")
 
     # --- Scheduler setup ---
+    # Create a background scheduler to run scrape_and_update periodically
     scheduler = BackgroundScheduler()
     scheduler.add_job(func=scrape_and_update, trigger="interval", hours=24)
     scheduler.start()
@@ -259,6 +284,7 @@ def create_app():
 
     return app
 
+# Run the Flask app if this file is executed directly
 if __name__ == "__main__":
     app = create_app()
     with app.app_context():
