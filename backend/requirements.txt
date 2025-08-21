@@ -3,3 +3,4 @@ flask-sqlalchemy
 apscheduler
 httpx
 beautifulsoup4
+open-ai
