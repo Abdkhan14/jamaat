@@ -10,9 +10,10 @@
   background: radial-gradient(circle, #1f8bc4 0%, #09092b 100%);
 }
 
+
 body {
   margin: 0;
-  padding: 20px 50px 0 50px;
+  padding: 20px 50px;
   font-family: var(--font-primary);
   color: var(--primary-text-color);
 }

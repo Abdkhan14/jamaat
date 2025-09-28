@@ -13,6 +13,9 @@ from datetime import date, datetime, time
 import atexit
 import json
 from openai import OpenAI
+from flask_cors import CORS
+import re
+
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -23,6 +26,9 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 def create_app():
     # Create Flask app instance
     app = Flask(__name__)
+    
+    CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
+    
     # Load configuration from Config object
     app.config.from_object(Config)
 
@@ -143,6 +149,18 @@ def create_app():
             )
 
         return prayer_json
+   
+    def clean_text(raw):
+        # Normalize line breaks and spacing
+        text = " ".join(raw.split())
+
+        # Ensure space after commas
+        text = text.replace(",", ", ")
+
+        # Fix broken time splits like "2\n:30"
+        text = re.sub(r"(\d)\s*:\s*(\d+)", r"\1:\2", text)
+
+        return text
 
     # Main function to scrape, extract, normalize, and update prayer times in the database
     def scrape_and_update():
@@ -154,7 +172,7 @@ def create_app():
             scraped_results = asyncio.run(scrape_all_mosques())
             for result in scraped_results:
                 if result: 
-                    raw_text = result["raw_text"]
+                    cleaned_text = clean_text(result["raw_text"])
                     # Compose prompt for LLM to extract prayer times
                     prompt = f"""
                     Extract the prayer times from the following text.
@@ -164,12 +182,18 @@ def create_app():
                     - If multiple times are present for the same prayer, still apply the earliest= start, latest= iqamah rule,
                     but the values themselves must be identical to the original text. 
                     - Prayer names may have different spellings (e.g., "Fajr" → "Fajar", "Maghrib" → "Magrib").
-                    - {{prayer}}_start usually refers to *adhan* / *begins* / *khutbah* / *azan* etc.
+                    - {{prayer}}_start is also referred as *adhan* / *begins* / *khutbah* / *azan* etc. 
                     - {{prayer}}_iqamah refers to the later congregational prayer time (*salah* / *salat*).
                     - If multiple times are listed for the same prayer, use the **earliest** as {{prayer}}_start
                     and the **latest** as {{prayer}}_iqamah.
                     - ⚠️ If **only one time** is mentioned for a prayer, assign the value to {{prayer}}_iqamah and set
                     {{prayer}}_start = null. 
+                    - ⚠️ Sometimes times are joined directly with words without spaces (e.g., "Khutbah1:30pm" or "Iqamah2:00pm").
+                    In such cases, you must still detect and extract the time exactly as written ("1:30pm", "2:00pm").
+                     Do not ignore times just because they are attached to words.
+                    - ⚠️ Sometimes times are broken by newlines or irregular spacing (e.g.,
+                    "6\n:30\npm" should be understood as "6:30 pm").
+                    You must normalize and extract the correct time string exactly as written, without losing AM/PM.
                     - If you can't find a valid time for a prayer, (ex: sometimes Maghrib times are represented as 'sunset' 
                     in websites) set the value = null.
                     
@@ -185,6 +209,8 @@ def create_app():
                             * 6 times → assign as 3 full start/iqamah pairs.
                         - Within a pair, the earlier = start, later = iqamah.
                         - If no times exist in the range, set all Jummah fields to null.
+                        - If a Jummah slot is written as Khutbah X:XX followed by Iqamah Y:YY and there can be commas not seperated by spaces, then 
+                        Khutbah time must always be the start and Iqamah time the iqamah, even if the text is irregularly formatted.
                         - Special case for jummah (do NOT output this example, it is only to guide you):
                         - If the input text contains:
                             Fajr 5:08 AM 6:00 AM  
@@ -206,6 +232,12 @@ def create_app():
                             "jummah3_iqamah": "3:45 PM"
                         - Just notice how I considered 1:45 PM as a valid jummah time, ONLY because it's in jummah time range, near other jummah timings,
                         even though it's not tied to a specific jummah word following the pattern.
+                        * If a line contains both "Khutbah" and "Iqamah" times, always map:
+                        - The Khutbah time → jummahN_start
+                        - The Iqamah time → jummahN_iqamah
+                        * This rule applies even if the Khutbah time is joined to the word (e.g., "Khutbah1:30pm")
+                            or split across lines (e.g., "1\n:30 pm").
+                        * Do not skip Khutbah times. They must always be extracted as the start time.
 
                     Return ONLY valid JSON in this exact schema, no explanation:
 
@@ -230,7 +262,7 @@ def create_app():
 
                     Text:
                     ---
-                    {raw_text}
+                    {cleaned_text}
                     ---
                     """
                     

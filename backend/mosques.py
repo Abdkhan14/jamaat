@@ -26,5 +26,5 @@ MOSQUES = [
         "website": "https://www.sunatuljamaat.com/",
         "latitude": 43.70370861787685,
         "longitude": -79.26959493102808
-    }
+    },
 ]
