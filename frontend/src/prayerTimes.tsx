@@ -1,5 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query";
-import { PRAYER_TIME_KEYS, type PrayerName, type PrayerTimes } from "./types";
+import { Prayer, PRAYER_TIME_KEYS, type PrayerTimes } from "./types";
 import { styled } from "styled-components";
 import { Alert, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from "@mui/material";
 import LocationPinIcon from '@mui/icons-material/LocationPin';
@@ -41,10 +41,10 @@ function PrayerTime({prayerTime, currentTime}: {prayerTime: PrayerTimes, current
     return <StyledPaper>
         <Header>
             <MosqueName>{prayerTime.name}</MosqueName>
-            <MosqueAddress><StyledLocationPinIcon color="error"/>{prayerTime.address}</MosqueAddress>
+            <MosqueAddress><StyledLocationPinIcon color="error"/>  <MosqueAddressText>{prayerTime.address}</MosqueAddressText></MosqueAddress>
         </Header>
         <TableContainer>
-            <Table aria-label="simple table">
+            <Table size="small" aria-label="simple table">
                 <TableHead>
                     <TableRow sx={{borderTop: '1px solid lightgray', backgroundColor: '#f0f0f0'}}>
                         <StyledTableCell>Prayer</StyledTableCell>
@@ -54,12 +54,12 @@ function PrayerTime({prayerTime, currentTime}: {prayerTime: PrayerTimes, current
                     </TableRow>
                 </TableHead>
                 <TableBody>
-                {(Object.keys(PRAYER_TIME_KEYS) as PrayerName[]).map((prayer) => {
+                {Object.values(Prayer).map((prayer) => {
                     const { start, iqamah } = PRAYER_TIME_KEYS[prayer];
                     const status = getStatus(prayerTime.prayer_times[iqamah], currentTime);
 
                     return (
-                        <TableRow key={prayer}>
+                        <TableRow key={prayer}> 
                         <StyledTableCell component="th" scope="row">
                             {prayer}
                         </StyledTableCell>
@@ -82,7 +82,7 @@ function PrayerTime({prayerTime, currentTime}: {prayerTime: PrayerTimes, current
                                  </Status> :  
                                  <Status>
                                     <CircleIcon sx={{fontSize: '12px', color:"gray"}} />
-                                    No Status
+                                    None
                                  </Status>
                             }
                         </StyledTableCell>
@@ -173,12 +173,21 @@ const MosqueAddress = styled.div`
     color: gray;
 `;
 
+const MosqueAddressText = styled.div`
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    font-size: small;
+`;
+
 const StyledLocationPinIcon = styled(LocationPinIcon)({
     transform: 'translateY(-3px)',
   });
 
 const StyledTableCell = styled(TableCell)({
     textTransform: 'capitalize',
+    padding: '5px 4px !important',
 });
 
 const Header = styled.div`

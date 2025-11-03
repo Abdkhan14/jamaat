@@ -7,8 +7,8 @@ export function Description() {
     <Wrapper>
         <Location>Scarborough - Canada</Location>
         <DescriptionText>All of our neighborhood mosques <br /> in one place</DescriptionText>
-        <div>To get notified about changes in prayer times:</div>
-        <DescriptionButton variant='contained'>Subscribe</DescriptionButton>
+        <div>To add your mosque to the list:</div>
+        <DescriptionButton variant='contained'>Submit a request</DescriptionButton>
     </Wrapper>
   )
 }
@@ -20,7 +20,7 @@ const Location = styled.div`
 
 const DescriptionText = styled.div`
     font-family: var(--font-secondary);
-    font-size: 60px;
+    font-size: clamp(1.5rem, 5vw, 4rem);
     text-align: center;
     width: 100%;
 `;  
@@ -32,7 +32,7 @@ const Wrapper = styled.div`
   align-items: center;
   justify-content: center;
   width: 100%;
-  margin: 50px;
+  margin: 40px;
 `;
 
 const DescriptionButton = styled(Button)({

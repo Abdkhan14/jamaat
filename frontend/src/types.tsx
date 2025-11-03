@@ -1,15 +1,13 @@
-const PRAYERS = [
-  'fajr',
-  'zuhr',
-  'asr',
-  'maghrib',
-  'isha',
-  'jummah1',
-  'jummah2',
-  'jummah3'
-] as const;
-
-export type PrayerName = typeof PRAYERS[number];
+export enum Prayer {
+  FAJR = 'fajr',
+  ZUHR = 'zuhr',
+  ASR = 'asr',
+  MAGHRIB = 'maghrib',
+  ISHA = 'isha',
+  JUMMAH1 = 'jummah1',
+  JUMMAH2 = 'jummah2',
+  JUMMAH3 = 'jummah3'
+}
 
 export type PrayerTimes = {
   address: string;
@@ -40,20 +38,13 @@ export type PrayerTimes = {
   };
 };
 
-type PrayerTimeKeysMap = {
-    [P in PrayerName]: {
-      start: keyof PrayerTimes["prayer_times"];
-      iqamah: keyof PrayerTimes["prayer_times"];
-    };
-};
-  
-export const PRAYER_TIME_KEYS: PrayerTimeKeysMap = {
-    fajr:    { start: "fajr_start",    iqamah: "fajr_iqamah" },
-    zuhr:    { start: "zuhr_start",    iqamah: "zuhr_iqamah" },
-    asr:     { start: "asr_start",     iqamah: "asr_iqamah" },
-    maghrib: { start: "maghrib_start", iqamah: "maghrib_iqamah" },
-    isha:    { start: "isha_start",    iqamah: "isha_iqamah" },
-    jummah1: { start: "jummah1_start", iqamah: "jummah1_iqamah" },
-    jummah2: { start: "jummah2_start", iqamah: "jummah2_iqamah" },
-    jummah3: { start: "jummah3_start", iqamah: "jummah3_iqamah" },
+export const PRAYER_TIME_KEYS: Record<Prayer, { start: keyof PrayerTimes["prayer_times"]; iqamah: keyof PrayerTimes["prayer_times"] }> = {
+    [Prayer.FAJR] :    { start: "fajr_start",    iqamah: "fajr_iqamah" },
+    [Prayer.ZUHR] :    { start: "zuhr_start",    iqamah: "zuhr_iqamah" },
+    [Prayer.ASR] :     { start: "asr_start",     iqamah: "asr_iqamah" },
+    [Prayer.MAGHRIB] : { start: "maghrib_start", iqamah: "maghrib_iqamah" },
+    [Prayer.ISHA] :    { start: "isha_start",    iqamah: "isha_iqamah" },
+    [Prayer.JUMMAH1] : { start: "jummah1_start", iqamah: "jummah1_iqamah" },
+    [Prayer.JUMMAH2] : { start: "jummah2_start", iqamah: "jummah2_iqamah" },
+    [Prayer.JUMMAH3] : { start: "jummah3_start", iqamah: "jummah3_iqamah" },
 };
