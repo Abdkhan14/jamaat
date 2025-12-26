@@ -39,6 +39,7 @@ export function Header() {
           <Typography fontSize={16} style={{color: 'black'}} id="keep-mounted-modal-title" variant="h6" component="h2">
             Hi! I'm Mohammed. I'm a software engineer, but first and foremost a Muslim.
             <br />
+            <br />
             I built this website to help my community easily access prayer times for their mosques in one place, without the need to visit multiple sites.
             <br />
             <br />

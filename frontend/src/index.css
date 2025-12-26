@@ -3,12 +3,9 @@
 :root {
   --font-primary: 'Poppins', sans-serif;
   --font-secondary: 'Inter', sans-serif;
-
+  
   --primary-text-color: #fff;
   
-  --mobile-breakpoint: 500px;
-  
-
   background: #1f8bc4;
   background: radial-gradient(circle, #1f8bc4 0%, #09092b 100%);
 }
