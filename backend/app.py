@@ -1,9 +1,7 @@
 from socket import timeout
 from flask import Flask, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
-import httpx
 import asyncio
-from bs4 import BeautifulSoup
 import os
 from dotenv import load_dotenv
 from config import Config
@@ -15,6 +13,7 @@ import json
 from openai import OpenAI
 from flask_cors import CORS
 import re
+from playwright.async_api import async_playwright
 
 
 # Load environment variables from a .env file
@@ -80,36 +79,74 @@ def create_app():
             # Return None if any error occurs
             return None
 
-    # Asynchronous function to scrape a single mosque's website
-    async def scrape_mosque(client, mosque):
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/115.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-
+    async def scrape_mosque_playwright(mosque):
         try:
-            # Fetch the mosque's website with a timeout and custom headers
-            response = await client.get(mosque["website"], timeout=120.0, headers=headers)
-            response.raise_for_status()
-            # Parse HTML and extract all text
-            soup = BeautifulSoup(response.text, "html.parser")
-            text = soup.get_text(separator="\n", strip=True)
-            return {
-                **mosque,
-                "raw_text": text
-            }
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-blink-features=AutomationControlled"
+                    ]
+                )
+
+                context = await browser.new_context(
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/120.0.0.0 Safari/537.36",
+                    locale="en-US",
+                    timezone_id="America/Toronto"
+                )
+
+                page = await context.new_page()
+                await page.goto(mosque["website"], timeout=120_000)
+
+                # Wait for page to settle (JS-rendered content)
+                await page.wait_for_load_state("networkidle")
+
+                # Get visible text only
+                text = await page.evaluate("""
+                    () => {
+                        const walker = document.createTreeWalker(
+                            document.body,
+                            NodeFilter.SHOW_TEXT,
+                            {
+                                acceptNode: (node) => {
+                                    if (!node.parentElement) return NodeFilter.FILTER_REJECT;
+                                    const style = window.getComputedStyle(node.parentElement);
+                                    if (style.display === "none" || style.visibility === "hidden") {
+                                        return NodeFilter.FILTER_REJECT;
+                                    }
+                                    return NodeFilter.FILTER_ACCEPT;
+                                }
+                            }
+                        );
+
+                        let content = [];
+                        while (walker.nextNode()) {
+                            const value = walker.currentNode.nodeValue.trim();
+                            if (value.length > 0) content.push(value);
+                        }
+                        return content.join("\\n");
+                    }
+                """)
+
+                await browser.close()
+
+                return {
+                    **mosque,
+                    "raw_text": text
+                }
+
         except Exception as e:
-            # Return None if scraping fails
+            print(f"[Playwright] Failed for {mosque['name']}: {e}")
             return None
 
     # Asynchronous function to scrape all mosques in parallel
     async def scrape_all_mosques():
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            tasks = [scrape_mosque(client, m) for m in MOSQUES]
-            return await asyncio.gather(*tasks)
+        tasks = [scrape_mosque_playwright(m) for m in MOSQUES]
+        return await asyncio.gather(*tasks)
 
     # Helper function to parse and format time strings
     def format_time(value):
@@ -308,7 +345,7 @@ def create_app():
     # --- Scheduler setup ---
     # Create a background scheduler to run scrape_and_update periodically
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=scrape_and_update, trigger="interval", hours=24)
+    scheduler.add_job(func=scrape_and_update, trigger="interval", hours=30)
     scheduler.start()
 
     # Ensure scheduler shuts down with Flask
