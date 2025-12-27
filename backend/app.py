@@ -14,7 +14,7 @@ from openai import OpenAI
 from flask_cors import CORS
 import re
 from playwright.async_api import async_playwright
-
+import pprint
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -61,15 +61,13 @@ def create_app():
     def call_llm(prompt: str):
         try:
             response = client.chat.completions.create(
-                model="gpt-4o", 
+                model="gpt-5.1",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that only outputs valid JSON objects."},
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=500,
-                temperature=0.0,
-                top_p=1.0,
-                response_format={"type": "json_object"}, 
+                max_completion_tokens=500,
+                top_p=1
             )
 
             choice = response.choices[0].message.content
@@ -77,6 +75,7 @@ def create_app():
 
         except Exception as e:
             # Return None if any error occurs
+            print(f"[OpenAI] Failed: {e}")
             return None
 
     async def scrape_mosque_playwright(mosque):
@@ -92,18 +91,21 @@ def create_app():
                 )
 
                 context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                            "AppleWebKit/537.36 (KHTML, like Gecko) "
-                            "Chrome/120.0.0.0 Safari/537.36",
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     locale="en-US",
-                    timezone_id="America/Toronto"
+                    timezone_id="America/Toronto",
+                    extra_http_headers={
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                        "Accept-Language": "en-US,en;q=0.9",
+                        "Referer": mosque["website"],
+                    }
                 )
-
                 page = await context.new_page()
+                page.set_default_timeout(180_000)
                 await page.goto(mosque["website"], timeout=120_000)
 
                 # Wait for page to settle (JS-rendered content)
-                await page.wait_for_load_state("networkidle")
+                await page.wait_for_load_state("networkidle", timeout=120_000)
 
                 # Get visible text only
                 text = await page.evaluate("""
@@ -188,14 +190,20 @@ def create_app():
         return prayer_json
    
     def clean_text(raw):
-        # Normalize line breaks and spacing
-        text = " ".join(raw.split())
+        # Normalize all line breaks and tabs to spaces
+        text = re.sub(r"[\n\t]+", " ", raw)
 
-        # Ensure space after commas
-        text = text.replace(",", ", ")
+        # Collapse multiple spaces into one
+        text = re.sub(r"\s{2,}", " ", text)
 
-        # Fix broken time splits like "2\n:30"
-        text = re.sub(r"(\d)\s*:\s*(\d+)", r"\1:\2", text)
+        # Ensure there is a space after punctuation like commas, colons, periods
+        text = re.sub(r"([,.:])([^\s])", r"\1 \2", text)
+
+        # Fix broken time splits like "2 :30" or "2\n:30" to "2:30"
+        text = re.sub(r"(\d{1,2})\s*:\s*(\d{2})", r"\1:\2", text)
+
+        # Ensure a space before AM/PM if missing
+        text = re.sub(r"(\d{1,2}:\d{2})([apAP][mM])", r"\1 \2", text)
 
         return text
 
@@ -305,10 +313,14 @@ def create_app():
                     
                     # Call LLM to extract prayer times from raw text
                     llm_response_json = call_llm(prompt)
-
+                    
                     if llm_response_json: 
                         # Normalize the LLM response for consistency
                         normalized_llm_response = normalize_prayer_times(llm_response_json)
+
+                        if result.get("name") == "The Sunatul Jamaat":
+                            with open("prompt_sunatul_jamaat.txt", "w", encoding="utf-8") as f:
+                                f.write(prompt)
 
                         # Create a new PrayerTimes record from normalized data
                         records.append(
@@ -345,7 +357,7 @@ def create_app():
     # --- Scheduler setup ---
     # Create a background scheduler to run scrape_and_update periodically
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=scrape_and_update, trigger="interval", hours=30)
+    scheduler.add_job(func=scrape_and_update, trigger="interval", seconds=60)
     scheduler.start()
 
     # Ensure scheduler shuts down with Flask
