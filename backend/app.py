@@ -86,25 +86,52 @@ def create_app():
                     args=[
                         "--no-sandbox",
                         "--disable-dev-shm-usage",
-                        "--disable-blink-features=AutomationControlled"
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-features=IsolateOrigins,site-per-process"
                     ]
                 )
 
                 context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                     locale="en-US",
                     timezone_id="America/Toronto",
+                    viewport={"width": 1920, "height": 1080},  # Add viewport
                     extra_http_headers={
                         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
                         "Accept-Language": "en-US,en;q=0.9",
-                        "Referer": mosque["website"],
+                        "Accept-Encoding": "gzip, deflate, br",
+                        "DNT": "1",
+                        "Connection": "keep-alive",
+                        "Upgrade-Insecure-Requests": "1"
                     }
                 )
+                
                 page = await context.new_page()
+                
+                # Hide webdriver detection
+                await page.add_init_script("""
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined
+                    });
+                    
+                    // Override the permissions API
+                    const originalQuery = window.navigator.permissions.query;
+                    window.navigator.permissions.query = (parameters) => (
+                        parameters.name === 'notifications' ?
+                            Promise.resolve({ state: Notification.permission }) :
+                            originalQuery(parameters)
+                    );
+                """)
+                
                 page.set_default_timeout(180_000)
-                await page.goto(mosque["website"], timeout=120_000)
-
-                # Wait for page to settle (JS-rendered content)
+                
+                # Navigate with waitUntil for more realistic loading
+                await page.goto(mosque["website"], wait_until="domcontentloaded", timeout=120_000)
+                
+                # Add random delay to simulate human behavior
+                await page.wait_for_timeout(2000)  # 2 second delay
+                
+                # Wait for page to settle
                 await page.wait_for_load_state("networkidle", timeout=120_000)
 
                 # Get visible text only
@@ -144,7 +171,6 @@ def create_app():
         except Exception as e:
             print(f"[Playwright] Failed for {mosque['name']}: {e}")
             return None
-
     # Asynchronous function to scrape all mosques in parallel
     async def scrape_all_mosques():
         tasks = [scrape_mosque_playwright(m) for m in MOSQUES]
@@ -318,8 +344,8 @@ def create_app():
                         # Normalize the LLM response for consistency
                         normalized_llm_response = normalize_prayer_times(llm_response_json)
 
-                        if result.get("name") == "The Sunatul Jamaat":
-                            with open("prompt_sunatul_jamaat.txt", "w", encoding="utf-8") as f:
+                        if result.get("name") == "Masjid Al-Abedeen":
+                            with open("prompt_abedeen.txt", "w", encoding="utf-8") as f:
                                 f.write(prompt)
 
                         # Create a new PrayerTimes record from normalized data
