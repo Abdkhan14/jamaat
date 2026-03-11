@@ -383,7 +383,7 @@ def create_app():
     # --- Scheduler setup ---
     # Create a background scheduler to run scrape_and_update periodically
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=scrape_and_update, trigger="interval", seconds=60)
+    scheduler.add_job(func=scrape_and_update, trigger="interval", hours=24)
     scheduler.start()
 
     # Ensure scheduler shuts down with Flask
