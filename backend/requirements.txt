@@ -1,6 +1,8 @@
 flask
 flask-sqlalchemy
+flask-cors
 apscheduler
-httpx
-beautifulsoup4
-open-ai
+python-dotenv
+openai
+playwright
+playwright-stealth

@@ -14,6 +14,7 @@ from openai import OpenAI
 from flask_cors import CORS
 import re
 from playwright.async_api import async_playwright
+from playwright_stealth import Stealth
 import pprint
 
 # Load environment variables from a .env file
@@ -84,6 +85,7 @@ def create_app():
                 browser = await p.chromium.launch(
                     headless=True,
                     args=[
+                        "--headless=new",
                         "--no-sandbox",
                         "--disable-dev-shm-usage",
                         "--disable-blink-features=AutomationControlled",
@@ -107,32 +109,18 @@ def create_app():
                 )
                 
                 page = await context.new_page()
-                
-                # Hide webdriver detection
-                await page.add_init_script("""
-                    Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined
-                    });
-                    
-                    // Override the permissions API
-                    const originalQuery = window.navigator.permissions.query;
-                    window.navigator.permissions.query = (parameters) => (
-                        parameters.name === 'notifications' ?
-                            Promise.resolve({ state: Notification.permission }) :
-                            originalQuery(parameters)
-                    );
-                """)
+                await Stealth().apply_stealth_async(page)
                 
                 page.set_default_timeout(180_000)
                 
-                # Navigate with waitUntil for more realistic loading
                 await page.goto(mosque["website"], wait_until="domcontentloaded", timeout=120_000)
-                
-                # Add random delay to simulate human behavior
-                await page.wait_for_timeout(2000)  # 2 second delay
-                
-                # Wait for page to settle
-                await page.wait_for_load_state("networkidle", timeout=120_000)
+
+                await page.wait_for_timeout(2000)
+
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=10_000)
+                except Exception:
+                    pass
 
                 # Get visible text only
                 text = await page.evaluate("""
@@ -231,6 +219,9 @@ def create_app():
         # Ensure a space before AM/PM if missing
         text = re.sub(r"(\d{1,2}:\d{2})([apAP][mM])", r"\1 \2", text)
 
+        # Fix split AM/PM markers like "10:30 p m" -> "10:30 pm"
+        text = re.sub(r"(\d{1,2}:\d{2})\s+([apAP])\s+([mM])\b", r"\1 \2\3", text)
+
         return text
 
     # Main function to scrape, extract, normalize, and update prayer times in the database
@@ -242,7 +233,7 @@ def create_app():
             # Scrape all mosques asynchronously
             scraped_results = asyncio.run(scrape_all_mosques())
             for result in scraped_results:
-                if result: 
+                if result:
                     cleaned_text = clean_text(result["raw_text"])
                     # Compose prompt for LLM to extract prayer times
                     prompt = f"""
@@ -274,7 +265,20 @@ def create_app():
                         - After assigning Fajr, Zuhr, Asr, Maghrib, and Isha, re-check the text for any times between 12:00 PM and 5:00 PM.
                         - ALL times in that range, near other jummah timings, must be treated as Jummah times, even if not labeled with the word "Jummah" or
                         it's alternate spellings.
-                        - Collect all valid Jummah times, sort them ascending, then distribute using the following pattern:
+                        - PRIORITY RULE — Numbered slot labels (apply BEFORE the count-based pairing rule below):
+                            * If each Jummah time is accompanied by an explicit numbered slot label such as
+                              "Jumuah 1" / "Jumuah 2" / "Jumuah 3",
+                              "Jamat 1" / "Jamat 2" / "Jamat 3",
+                              "1st Jamat" / "2nd Jamat" / "3rd Jamat",
+                              "Jumu'ah 1" / "1st Jumu'ah" / etc.,
+                              then each labeled time is its OWN iqamah. Map directly:
+                                - slot-1 label → jummah1_iqamah
+                                - slot-2 label → jummah2_iqamah
+                                - slot-3 label → jummah3_iqamah
+                              Set jummahN_start = null UNLESS that time is also explicitly preceded by
+                              "Khutbah" / "Adhan" / "Azan" / "Begins" (in which case the start/iqamah pairing applies for that single slot).
+                            * SKIP the "2–5 times → pairs" distribution rule entirely when numbered slot labels are present.
+                        - Count-based pairing (only applies when numbered slot labels are NOT present):
                             * 1 time → jummah1_iqamah only (start = null).
                             * 2 to 5 times → assign left to right as start/iqamah pairs; if odd (3) or (5), last one is iqamah only.
                             * 6 times → assign as 3 full start/iqamah pairs.
@@ -344,10 +348,6 @@ def create_app():
                         # Normalize the LLM response for consistency
                         normalized_llm_response = normalize_prayer_times(llm_response_json)
 
-                        if result.get("name") == "Masjid Al-Abedeen":
-                            with open("prompt_abedeen.txt", "w", encoding="utf-8") as f:
-                                f.write(prompt)
-
                         # Create a new PrayerTimes record from normalized data
                         records.append(
                             PrayerTimes(
@@ -383,7 +383,7 @@ def create_app():
     # --- Scheduler setup ---
     # Create a background scheduler to run scrape_and_update periodically
     scheduler = BackgroundScheduler()
-    scheduler.add_job(func=scrape_and_update, trigger="interval", hours=24)
+    scheduler.add_job(func=scrape_and_update, trigger="interval", seconds=3000)
     scheduler.start()
 
     # Ensure scheduler shuts down with Flask

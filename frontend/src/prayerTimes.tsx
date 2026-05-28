@@ -1,9 +1,10 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Prayer, PRAYER_TIME_KEYS, type PrayerTimes } from "./types";
 import { styled } from "styled-components";
-import { Alert, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from "@mui/material";
+import { Alert, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from "@mui/material";
 import LocationPinIcon from '@mui/icons-material/LocationPin';
 import CircleIcon from '@mui/icons-material/Circle';
+import MosqueIcon from '@mui/icons-material/Mosque';
 
 export function PrayerTimes({
     currentTime,
@@ -30,9 +31,23 @@ export function PrayerTimes({
     );
   }
 
+  if (!data || data.length === 0) {
+    return (
+      <Wrapper>
+        <EmptyState>
+          <MosqueIcon sx={{ fontSize: 56, color: 'rgba(255,255,255,0.6)' }} />
+          <Typography variant="h6" sx={{ color: '#fff' }}>No prayer times yet</Typography>
+          <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.6)' }}>
+            Times are fetched automatically every 24 hours. Check back soon.
+          </Typography>
+        </EmptyState>
+      </Wrapper>
+    );
+  }
+
   return (
     <Wrapper>
-        {data?.map(pt => <PrayerTime prayerTime={pt} currentTime={currentTime}/>)}
+        {data.map(pt => <PrayerTime key={pt.name} prayerTime={pt} currentTime={currentTime}/>)}
     </Wrapper>
   )
 }
@@ -218,4 +233,16 @@ const Wrapper = styled.div`
     flex-wrap: wrap;
     flex: 1;
     width: 100%;
+`;
+
+const EmptyState = styled.div`
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 48px 32px;
+    text-align: center;
+    border: 1px dotted rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    margin-top: 32px;
 `;

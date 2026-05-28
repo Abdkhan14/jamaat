@@ -2,7 +2,7 @@ MOSQUES = [
     {
         "name": "Baitul Aman",
         "address": "3114 Danforth Ave, Scarborough, ON M1L 1B1",
-        "website": "https://danforthcommunitycenter.org/",
+        "website": "https://timing.athanplus.com/masjid/widgets/embed?theme=1&masjid_id=rdRyqDAG&header=no&monthly=v2",
         "latitude": 43.691767549675056,
         "longitude": -79.28748266331257
     },
