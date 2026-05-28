@@ -1,5 +1,6 @@
 from socket import timeout
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
+import requests as http_requests
 from apscheduler.schedulers.background import BackgroundScheduler
 import asyncio
 import os
@@ -57,6 +58,37 @@ def create_app():
 
         # Return the result as JSON
         return jsonify(result)
+
+    @app.route("/mosque-request", methods=["POST"])
+    def submit_mosque_request():
+        webhook_url = os.environ.get("GSHEET_WEBHOOK_URL")
+        if not webhook_url:
+            app.logger.error("GSHEET_WEBHOOK_URL is not configured")
+            return jsonify({"error": "submissions are not configured"}), 503
+
+        data = request.get_json(silent=True) or {}
+        mosque_name = (data.get("mosque_name") or "").strip()
+        additional_info = (data.get("additional_info") or "").strip()
+
+        if not mosque_name:
+            return jsonify({"error": "mosque_name is required"}), 400
+        if len(mosque_name) > 200 or len(additional_info) > 2000:
+            return jsonify({"error": "field too long"}), 400
+
+        payload = {
+            "mosque_name": mosque_name,
+            "additional_info": additional_info,
+            "submitter_ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+        }
+
+        try:
+            r = http_requests.post(webhook_url, json=payload, timeout=8)
+            r.raise_for_status()
+        except Exception:
+            app.logger.exception("Sheet webhook failed")
+            return jsonify({"error": "submission failed"}), 502
+
+        return jsonify({"ok": True}), 201
 
     # Function to call the OpenAI LLM with a prompt and return parsed JSON
     def call_llm(prompt: str):

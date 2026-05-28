@@ -8,13 +8,19 @@ import IconButton from '@mui/material/IconButton';
 import CloseIcon from '@mui/icons-material/Close';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
 import { useState } from 'react';
+import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5000';
 
 export function Description() {
   const [open, setOpen] = useState(false);
   const [mosqueName, setMosqueName] = useState('');
   const [additionalInfo, setAdditionalInfo] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const [showErrorToast, setShowErrorToast] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleOpen = () => setOpen(true);
   const handleClose = () => {
@@ -23,16 +29,29 @@ export function Description() {
     setAdditionalInfo('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission here
-    console.log({ mosqueName, additionalInfo });
-    handleClose();
-    setShowToast(true);
+    try {
+      setSubmitting(true);
+      await axios.post(`${API_URL}/mosque-request`, {
+        mosque_name: mosqueName,
+        additional_info: additionalInfo,
+      });
+      handleClose();
+      setShowToast(true);
+    } catch {
+      setShowErrorToast(true);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleCloseToast = () => {
     setShowToast(false);
+  };
+
+  const handleCloseErrorToast = () => {
+    setShowErrorToast(false);
   };
 
   return (
@@ -82,11 +101,15 @@ export function Description() {
               />
 
               <ButtonGroup>
-                <CancelButton onClick={handleClose}>
+                <CancelButton onClick={handleClose} disabled={submitting}>
                   Cancel
                 </CancelButton>
-                <SubmitButton type="submit" variant="contained">
-                  Submit Request
+                <SubmitButton type="submit" variant="contained" disabled={submitting}>
+                  {submitting ? (
+                    <CircularProgress size={20} sx={{ color: 'white' }} />
+                  ) : (
+                    'Submit Request'
+                  )}
                 </SubmitButton>
               </ButtonGroup>
             </FormContent>
@@ -106,6 +129,21 @@ export function Description() {
           sx={{ width: '100%' }}
         >
           Request submitted successfully!
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={showErrorToast}
+        autoHideDuration={5000}
+        onClose={handleCloseErrorToast}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={handleCloseErrorToast}
+          severity="error"
+          sx={{ width: '100%' }}
+        >
+          Submission failed. Please try again.
         </Alert>
       </Snackbar>
     </Wrapper>
