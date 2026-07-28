@@ -3,11 +3,13 @@
 :root {
   --font-primary: 'Poppins', sans-serif;
   --font-secondary: 'Inter', sans-serif;
-  
+
   --primary-text-color: #fff;
-  
-  background: #1f8bc4;
-  background: radial-gradient(circle, #1f8bc4 0%, #09092b 100%);
+
+  min-height: 100%;
+  background-color: #09092b;
+  background-image: radial-gradient(circle, #1f8bc4 0%, #09092b 100%);
+  background-repeat: no-repeat;
 }
 
 
