@@ -6,6 +6,7 @@ primary_region = "yyz"
 [env]
   PORT = "8080"
   DATABASE_PATH = "/data/prayer_times.db"
+  ALLOWED_ORIGINS = "https://jamaat-chi.vercel.app"
 
 [[mounts]]
   source = "jamaat_data"

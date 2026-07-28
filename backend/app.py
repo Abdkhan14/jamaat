@@ -48,7 +48,12 @@ def create_app():
     # Create Flask app instance
     app = Flask(__name__)
     
-    CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
+    ALLOWED_ORIGINS = [
+        o.strip()
+        for o in os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+        if o.strip()
+    ]
+    CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}})
     
     # Load configuration from Config object
     app.config.from_object(Config)
