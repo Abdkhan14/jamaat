@@ -488,12 +488,12 @@ def create_app():
     with app.app_context():
         db.create_all()
 
-    scheduler = BackgroundScheduler()
+    scheduler = BackgroundScheduler(timezone=EASTERN)
     scheduler.add_job(
         func=scrape_and_update,
-        trigger="interval",
-        hours=24,
-        next_run_time=datetime.now(),
+        trigger="cron",
+        hour=3,
+        minute=0,
         id="scrape_and_update",
         max_instances=1,
         coalesce=True,
