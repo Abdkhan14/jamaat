@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import { usePrayerTimes } from "./hooks/usePrayerTimes";
 import { PrayerTimes } from "./prayerTimes";
 import { useCurrentTime } from "./hooks/useCurrentTime";
+import { Analytics } from '@vercel/analytics/react';
 
 function App() {
   const prayerTimesResult = usePrayerTimes();
@@ -14,6 +15,7 @@ function App() {
       <Header/>
       <Description/>
       <PrayerTimes currentTime={currentTime} prayerTimesResult={prayerTimesResult}/>
+      <Analytics />
     </Wrapper>
   )
 }
