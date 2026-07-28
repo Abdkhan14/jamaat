@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import type { PrayerTimes } from '../types';
+import { API_URL } from '../config';
 
 const fetchPrayerTimes = async (): Promise<PrayerTimes[]> => {
-  const response = await axios.get<PrayerTimes[]>('http://127.0.0.1:5000/prayer-times');
+  const response = await axios.get<PrayerTimes[]>(`${API_URL}/prayer-times`);
   return response.data;
 };
 

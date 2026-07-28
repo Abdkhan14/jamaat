@@ -3,5 +3,6 @@ import os
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 class Config:
-    SQLALCHEMY_DATABASE_URI = f"sqlite:///{os.path.join(BASE_DIR, 'prayer_times.db')}"
+    DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "prayer_times.db"))
+    SQLALCHEMY_DATABASE_URI = f"sqlite:///{DB_PATH}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False

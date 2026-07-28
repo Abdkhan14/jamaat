@@ -79,6 +79,10 @@ def create_app():
         # Return the result as JSON
         return jsonify(result)
 
+    @app.route("/health", methods=["GET"])
+    def health():
+        return {"status": "ok"}, 200
+
     @app.route("/mosque-request", methods=["POST"])
     def submit_mosque_request():
         webhook_url = os.environ.get("GSHEET_WEBHOOK_URL")

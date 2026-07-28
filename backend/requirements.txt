@@ -4,8 +4,9 @@ flask-cors
 apscheduler
 python-dotenv
 openai
-playwright
+playwright==1.61.0
 playwright-stealth
 requests
 httpx
 beautifulsoup4
+gunicorn
