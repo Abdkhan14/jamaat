@@ -7,3 +7,5 @@ openai
 playwright
 playwright-stealth
 requests
+httpx
+beautifulsoup4

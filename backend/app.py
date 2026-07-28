@@ -1,4 +1,4 @@
-from socket import timeout
+import hashlib
 from flask import Flask, jsonify, request
 import requests as http_requests
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -16,7 +16,27 @@ from flask_cors import CORS
 import re
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
-import pprint
+from bs4 import BeautifulSoup
+import httpx
+
+BLOCK_MARKERS = (
+    # Generic 403 phrases
+    "403 - forbidden",
+    "403 forbidden",
+    "error 403",
+    "access to this page is forbidden",
+    "access denied",
+    "you have been blocked",
+    # Cloudflare challenge pages
+    "just a moment",
+    "checking your browser",
+    "enable javascript and cookies to continue",
+    "attention required! | cloudflare",
+    # Bot / captcha walls
+    "are you human",
+    "complete the captcha",
+    "automated access",
+)
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -100,7 +120,8 @@ def create_app():
                     {"role": "user", "content": prompt},
                 ],
                 max_completion_tokens=500,
-                top_p=1
+                top_p=1,
+                timeout=30
             )
 
             choice = response.choices[0].message.content
@@ -109,6 +130,26 @@ def create_app():
         except Exception as e:
             # Return None if any error occurs
             print(f"[OpenAI] Failed: {e}")
+            return None
+
+    def fetch_via_requests(mosque):
+        # NOTE: Some mosque WAFs (e.g. irccan.com) block requests that claim to be
+        # a browser via a spoofed User-Agent but lack a matching browser TLS
+        # fingerprint. A plain client with a consistent fingerprint is served
+        # normally, so we intentionally do NOT send browser-spoofing headers here.
+        try:
+            with httpx.Client(timeout=20, follow_redirects=True) as client:
+                response = client.get(mosque["website"])
+                response.raise_for_status()
+
+            soup = BeautifulSoup(response.text, "html.parser")
+            for tag in soup(["script", "style", "noscript"]):
+                tag.decompose()
+
+            text = soup.get_text(separator="\n")
+            return {**mosque, "raw_text": text}
+        except Exception as e:
+            print(f"[httpx] Fallback failed for {mosque['name']}: {e}")
             return None
 
     async def scrape_mosque_playwright(mosque):
@@ -180,6 +221,11 @@ def create_app():
                         return content.join("\\n");
                     }
                 """)
+
+                if not text or any(m in text.lower() for m in BLOCK_MARKERS):
+                    print(f"[Playwright] block page detected for {mosque['name']}, falling back to requests")
+                    await browser.close()
+                    return await asyncio.to_thread(fetch_via_requests, mosque)
 
                 await browser.close()
 
@@ -256,19 +302,7 @@ def create_app():
 
         return text
 
-    # Main function to scrape, extract, normalize, and update prayer times in the database
-    def scrape_and_update():
-        with app.app_context():
-            print("Mock job running: scraping + LLM simulation...")
-
-            records = []
-            # Scrape all mosques asynchronously
-            scraped_results = asyncio.run(scrape_all_mosques())
-            for result in scraped_results:
-                if result:
-                    cleaned_text = clean_text(result["raw_text"])
-                    # Compose prompt for LLM to extract prayer times
-                    prompt = f"""
+    PROMPT_TEMPLATE = """
                     Extract the prayer times from the following text.
 
                     - Prayer times must be copied exactly as written in the text (e.g., "10:00 PM" stays "10:00 PM").
@@ -372,60 +406,95 @@ def create_app():
                     {cleaned_text}
                     ---
                     """
-                    
-                    # Call LLM to extract prayer times from raw text
-                    llm_response_json = call_llm(prompt)
-                    
-                    if llm_response_json: 
-                        # Normalize the LLM response for consistency
-                        normalized_llm_response = normalize_prayer_times(llm_response_json)
 
-                        # Create a new PrayerTimes record from normalized data
-                        records.append(
-                            PrayerTimes(
-                                mosque_name=result["name"],
-                                date=date.today(),
-                                fajr_start=format_time(normalized_llm_response["fajr_start"]),
-                                fajr_iqamah=format_time(normalized_llm_response["fajr_iqamah"]),
-                                zuhr_start=format_time(normalized_llm_response["zuhr_start"]),
-                                zuhr_iqamah=format_time(normalized_llm_response["zuhr_iqamah"]),
-                                asr_start=format_time(normalized_llm_response["asr_start"]),
-                                asr_iqamah=format_time(normalized_llm_response["asr_iqamah"]),
-                                maghrib_start=format_time(normalized_llm_response["maghrib_start"]),
-                                maghrib_iqamah=format_time(normalized_llm_response["maghrib_iqamah"]),
-                                isha_start=format_time(normalized_llm_response["isha_start"]),
-                                isha_iqamah=format_time(normalized_llm_response["isha_iqamah"]),
-                                jummah1_start=format_time(normalized_llm_response["jummah1_start"]),
-                                jummah1_iqamah=format_time(normalized_llm_response["jummah1_iqamah"]),
-                                jummah2_start=format_time(normalized_llm_response["jummah2_start"]),
-                                jummah2_iqamah=format_time(normalized_llm_response["jummah2_iqamah"]),
-                                jummah3_start=format_time(normalized_llm_response["jummah3_start"]),
-                                jummah3_iqamah=format_time(normalized_llm_response["jummah3_iqamah"]),
-                                updated_at=datetime.now()
-                            ),
-                        )
+    async def process_mosque(result):
+        """Hash-check, call LLM, and return a PrayerTimes record or None."""
+        cleaned_text = clean_text(result["raw_text"])
 
-            # Merge (upsert) all new records into the database
+        content_hash = hashlib.sha256(cleaned_text.encode("utf-8")).hexdigest()
+        existing = db.session.get(PrayerTimes, result["name"])
+        if existing and existing.raw_text_hash == content_hash:
+            print(f"[skip] {result['name']} unchanged, skipping LLM")
+            return None
+
+        prompt = PROMPT_TEMPLATE.format(cleaned_text=cleaned_text)
+
+        llm_response_json = await asyncio.to_thread(call_llm, prompt)
+        if not llm_response_json:
+            return None
+
+        normalized_llm_response = normalize_prayer_times(llm_response_json)
+
+        if result.get("name") == "Masjid Al-Abedeen":
+            with open("prompt_abedeen.txt", "w", encoding="utf-8") as f:
+                f.write(prompt)
+
+        return PrayerTimes(
+            mosque_name=result["name"],
+            date=date.today(),
+            fajr_start=format_time(normalized_llm_response["fajr_start"]),
+            fajr_iqamah=format_time(normalized_llm_response["fajr_iqamah"]),
+            zuhr_start=format_time(normalized_llm_response["zuhr_start"]),
+            zuhr_iqamah=format_time(normalized_llm_response["zuhr_iqamah"]),
+            asr_start=format_time(normalized_llm_response["asr_start"]),
+            asr_iqamah=format_time(normalized_llm_response["asr_iqamah"]),
+            maghrib_start=format_time(normalized_llm_response["maghrib_start"]),
+            maghrib_iqamah=format_time(normalized_llm_response["maghrib_iqamah"]),
+            isha_start=format_time(normalized_llm_response["isha_start"]),
+            isha_iqamah=format_time(normalized_llm_response["isha_iqamah"]),
+            jummah1_start=format_time(normalized_llm_response["jummah1_start"]),
+            jummah1_iqamah=format_time(normalized_llm_response["jummah1_iqamah"]),
+            jummah2_start=format_time(normalized_llm_response["jummah2_start"]),
+            jummah2_iqamah=format_time(normalized_llm_response["jummah2_iqamah"]),
+            jummah3_start=format_time(normalized_llm_response["jummah3_start"]),
+            jummah3_iqamah=format_time(normalized_llm_response["jummah3_iqamah"]),
+            raw_text_hash=content_hash,
+            updated_at=datetime.now()
+        )
+
+    async def run_all():
+        """Scrape all mosques and process LLM calls, both in parallel."""
+        scraped_results = await scrape_all_mosques()
+        valid_results = [r for r in scraped_results if r]
+        processed = await asyncio.gather(*[process_mosque(r) for r in valid_results])
+        return [r for r in processed if r is not None]
+
+    # Main function called by APScheduler
+    def scrape_and_update():
+        with app.app_context():
+            print("Scrape job running...")
+
+            records = asyncio.run(run_all())
+
             for record in records:
-                db.session.merge(record) 
+                db.session.merge(record)
             db.session.commit()
 
-            print("Mock job finished: data updated.")
+            print("Scrape job finished: data updated.")
 
     # --- Scheduler setup ---
-    # Create a background scheduler to run scrape_and_update periodically
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(func=scrape_and_update, trigger="interval", seconds=3000)
-    scheduler.start()
+    with app.app_context():
+        db.create_all()
 
-    # Ensure scheduler shuts down with Flask
-    atexit.register(lambda: scheduler.shutdown())
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
+        func=scrape_and_update,
+        trigger="interval",
+        hours=24,
+        next_run_time=datetime.now(),
+        id="scrape_and_update",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+
+    if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        scheduler.start()
+        atexit.register(lambda: scheduler.shutdown())
 
     return app
 
 # Run the Flask app if this file is executed directly
 if __name__ == "__main__":
     app = create_app()
-    with app.app_context():
-        db.create_all()  # ensure tables are created
     app.run()

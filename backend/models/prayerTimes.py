@@ -33,6 +33,8 @@ class PrayerTimes(db.Model):
     jummah3_start = db.Column(db.Time, nullable=True)
     jummah3_iqamah = db.Column(db.Time, nullable=True)
 
+    raw_text_hash = db.Column(db.String, nullable=True)
+
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )

@@ -71,7 +71,9 @@ function PrayerTime({prayerTime, currentTime}: {prayerTime: PrayerTimes, current
                 <TableBody>
                 {Object.values(Prayer).map((prayer) => {
                     const { start, iqamah } = PRAYER_TIME_KEYS[prayer];
-                    const status = getStatus(prayerTime.prayer_times[iqamah], currentTime);
+                    const isJummah = [Prayer.JUMMAH1, Prayer.JUMMAH2, Prayer.JUMMAH3].includes(prayer);
+                    const isFriday = currentTime.getDay() === 5;
+                    const status = (isJummah && !isFriday) ? 'na' : getStatus(prayerTime.prayer_times[iqamah], currentTime);
 
                     return (
                         <TableRow key={prayer}> 
@@ -85,7 +87,12 @@ function PrayerTime({prayerTime, currentTime}: {prayerTime: PrayerTimes, current
                             {formatTime(prayerTime.prayer_times[iqamah])}
                         </StyledTableCell>
                         <StyledTableCell align="right">
-                            {status === 'available' ?
+                            {status === 'na' ?
+                                 <Status>
+                                    <CircleIcon sx={{fontSize: '12px', color:"gray"}} />
+                                    None
+                                 </Status>
+                                 : status === 'available' ?
                                  <Status>
                                     <CircleIcon sx={{fontSize: '12px', color:"green"}} />
                                     Available
@@ -111,7 +118,7 @@ function PrayerTime({prayerTime, currentTime}: {prayerTime: PrayerTimes, current
     </StyledPaper>;
 }
 
-function getStatus(iqamah_time: string | null, currentTime: Date): 'available' | 'finished' | 'default'  {
+function getStatus(iqamah_time: string | null, currentTime: Date): 'available' | 'finished' | 'default' | 'na' {
     if (!iqamah_time) return "default";
 
     // Parse iqamah_time (e.g. "04:59:00" or "4:59 AM")
