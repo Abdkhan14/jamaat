@@ -1,7 +1,8 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Prayer, PRAYER_TIME_KEYS, type PrayerTimes } from "./types";
 import { styled } from "styled-components";
-import { Alert, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from "@mui/material";
+import { Alert, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from "@mui/material";
+import { LoadingTerminal } from "./components/loadingTerminal";
 import LocationPinIcon from '@mui/icons-material/LocationPin';
 import CircleIcon from '@mui/icons-material/Circle';
 import MosqueIcon from '@mui/icons-material/Mosque';
@@ -18,7 +19,7 @@ export function PrayerTimes({
   if(isLoading) {
     return (
         <Wrapper>
-            <CircularProgress color="inherit" />
+            <LoadingTerminal />
         </Wrapper>
     )
   }
