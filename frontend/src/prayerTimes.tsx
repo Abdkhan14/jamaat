@@ -121,21 +121,19 @@ function PrayerTime({prayerTime, currentTime}: {prayerTime: PrayerTimes, current
 function getStatus(iqamah_time: string | null, currentTime: Date): 'available' | 'finished' | 'default' | 'na' {
     if (!iqamah_time) return "default";
 
+    const current = new Date(`1970-01-01T${easternClock(currentTime)}`);
+
     // Parse iqamah_time (e.g. "04:59:00" or "4:59 AM")
     const parsed = new Date(`1970-01-01T${iqamah_time}`);
-  
+
     if (isNaN(parsed.getTime())) {
-      // Try fallback parse if it's in 12h format with AM/PM
-      const tryParse = Date.parse(`1970-01-01 ${iqamah_time}`);
-      if (isNaN(tryParse)) return "default";
-      return currentTime.getTime() < tryParse ? "available" : "finished";
+      // Fallback for 12h format with AM/PM - normalize to 1970 base against Eastern clock
+      const tryParse = new Date(`1970-01-01 ${iqamah_time}`);
+      if (isNaN(tryParse.getTime())) return "default";
+      return current < tryParse ? "available" : "finished";
     }
-  
-    const current = new Date(
-      `1970-01-01T${currentTime.toTimeString().slice(0, 8)}`
-    );
-  
-    return current < parsed ? "available" : "finished"; 
+
+    return current < parsed ? "available" : "finished";
 }
 
 function formatTime(time: string | null): string {
@@ -152,19 +150,30 @@ function formatTime(time: string | null): string {
     });
   }
 
+function easternClock(date: Date): string {
+    return new Intl.DateTimeFormat("en-GB", {
+        timeZone: "America/Toronto",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+    }).format(date);
+}
+
 function formatUpdatedAt(updatedAt: string) {
     const date = new Date(updatedAt);
 
-    const options = {
+    const options: Intl.DateTimeFormatOptions = {
         day: "2-digit",
         month: "2-digit",
-        year: "2-digit", 
+        year: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
         hour12: true,
-    } as any;
-    
-    return new Intl.DateTimeFormat("en-GB", options).format(date);
+        timeZone: "America/Toronto",
+    };
+
+    return `${new Intl.DateTimeFormat("en-GB", options).format(date)} ET`;
 }
 
 const Status = styled.div`

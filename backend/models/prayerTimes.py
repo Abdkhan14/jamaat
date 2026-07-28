@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timezone
 
 db = SQLAlchemy()
 
@@ -36,11 +36,16 @@ class PrayerTimes(db.Model):
     raw_text_hash = db.Column(db.String, nullable=True)
 
     updated_at = db.Column(
-        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     def to_dict(self):
         """Serialize to dict for JSON responses."""
+        ts = self.updated_at
+        if ts is not None and ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
         return {
             "mosque_name": self.mosque_name,
             "date": self.date.isoformat(),
@@ -60,5 +65,5 @@ class PrayerTimes(db.Model):
             "jummah2_iqamah": str(self.jummah2_iqamah) if self.jummah2_iqamah else None,
             "jummah3_start": str(self.jummah3_start) if self.jummah3_start else None,
             "jummah3_iqamah": str(self.jummah3_iqamah) if self.jummah3_iqamah else None,
-            "updated_at": self.updated_at.isoformat(),
+            "updated_at": ts.isoformat() if ts is not None else None,
         }

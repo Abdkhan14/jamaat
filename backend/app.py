@@ -8,7 +8,10 @@ from dotenv import load_dotenv
 from config import Config
 from models.prayerTimes import db, PrayerTimes
 from mosques import MOSQUES
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
+from zoneinfo import ZoneInfo
+
+EASTERN = ZoneInfo("America/Toronto")
 import atexit
 import json
 from openai import OpenAI
@@ -440,7 +443,7 @@ def create_app():
 
         return PrayerTimes(
             mosque_name=result["name"],
-            date=date.today(),
+            date=datetime.now(EASTERN).date(),
             fajr_start=format_time(normalized_llm_response["fajr_start"]),
             fajr_iqamah=format_time(normalized_llm_response["fajr_iqamah"]),
             zuhr_start=format_time(normalized_llm_response["zuhr_start"]),
@@ -458,7 +461,7 @@ def create_app():
             jummah3_start=format_time(normalized_llm_response["jummah3_start"]),
             jummah3_iqamah=format_time(normalized_llm_response["jummah3_iqamah"]),
             raw_text_hash=content_hash,
-            updated_at=datetime.now()
+            updated_at=datetime.now(timezone.utc)
         )
 
     async def run_all():
