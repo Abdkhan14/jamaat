@@ -1,5 +1,7 @@
 # Jamaat
 
+**Live:** [jamaat-chi.vercel.app](https://jamaat-chi.vercel.app)
+
 A full-stack web app that aggregates daily prayer times from mosques in Scarborough, ON. It scrapes each mosque's website using Playwright, extracts structured prayer times via an OpenAI LLM, and serves them through a REST API to a React frontend.
 
 ## Features
