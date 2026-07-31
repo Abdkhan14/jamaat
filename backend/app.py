@@ -441,19 +441,27 @@ def create_app():
             with open("prompt_abedeen.txt", "w", encoding="utf-8") as f:
                 f.write(prompt)
 
+        daily_prayer_times = {
+            "fajr_start": format_time(normalized_llm_response["fajr_start"]),
+            "fajr_iqamah": format_time(normalized_llm_response["fajr_iqamah"]),
+            "zuhr_start": format_time(normalized_llm_response["zuhr_start"]),
+            "zuhr_iqamah": format_time(normalized_llm_response["zuhr_iqamah"]),
+            "asr_start": format_time(normalized_llm_response["asr_start"]),
+            "asr_iqamah": format_time(normalized_llm_response["asr_iqamah"]),
+            "maghrib_start": format_time(normalized_llm_response["maghrib_start"]),
+            "maghrib_iqamah": format_time(normalized_llm_response["maghrib_iqamah"]),
+            "isha_start": format_time(normalized_llm_response["isha_start"]),
+            "isha_iqamah": format_time(normalized_llm_response["isha_iqamah"]),
+        }
+
+        if all(v is None for v in daily_prayer_times.values()):
+            print(f"[reject] {result['name']} LLM returned only nulls, keeping existing data")
+            return None
+
         return PrayerTimes(
             mosque_name=result["name"],
             date=datetime.now(EASTERN).date(),
-            fajr_start=format_time(normalized_llm_response["fajr_start"]),
-            fajr_iqamah=format_time(normalized_llm_response["fajr_iqamah"]),
-            zuhr_start=format_time(normalized_llm_response["zuhr_start"]),
-            zuhr_iqamah=format_time(normalized_llm_response["zuhr_iqamah"]),
-            asr_start=format_time(normalized_llm_response["asr_start"]),
-            asr_iqamah=format_time(normalized_llm_response["asr_iqamah"]),
-            maghrib_start=format_time(normalized_llm_response["maghrib_start"]),
-            maghrib_iqamah=format_time(normalized_llm_response["maghrib_iqamah"]),
-            isha_start=format_time(normalized_llm_response["isha_start"]),
-            isha_iqamah=format_time(normalized_llm_response["isha_iqamah"]),
+            **daily_prayer_times,
             jummah1_start=format_time(normalized_llm_response["jummah1_start"]),
             jummah1_iqamah=format_time(normalized_llm_response["jummah1_iqamah"]),
             jummah2_start=format_time(normalized_llm_response["jummah2_start"]),
