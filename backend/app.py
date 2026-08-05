@@ -317,6 +317,16 @@ def create_app():
     PROMPT_TEMPLATE = """
                     Extract the prayer times from the following text.
 
+                    TODAY'S DATE: {today}
+
+                    - Some pages list prayer times for SEVERAL DAYS at once (a weekly/monthly calendar, or
+                    the same set of prayers repeated once per day). In that case, extract ONLY the block or
+                    row belonging to TODAY'S DATE above, and ignore every other date.
+                    - If the text repeats several similar day-blocks but none of them is labelled with a date
+                    you can match to today, use the FIRST block and treat the rest as duplicates to ignore.
+                    - If the text only covers a single day (no dates, or one date), ignore the two rules above
+                    and extract the times normally.
+
                     - Prayer times must be copied exactly as written in the text (e.g., "10:00 PM" stays "10:00 PM").
                     - Do not round, adjust, or guess times.
                     - If multiple times are present for the same prayer, still apply the earliest= start, latest= iqamah rule,
@@ -429,7 +439,10 @@ def create_app():
             print(f"[skip] {result['name']} unchanged, skipping LLM")
             return None
 
-        prompt = PROMPT_TEMPLATE.format(cleaned_text=cleaned_text)
+        today = datetime.now(EASTERN)
+        # Day is built without strftime's zero-padding so it matches how sites write dates.
+        today_label = f"{today:%A, %B} {today.day}, {today:%Y}"
+        prompt = PROMPT_TEMPLATE.format(cleaned_text=cleaned_text, today=today_label)
 
         llm_response_json = await asyncio.to_thread(call_llm, prompt)
         if not llm_response_json:
@@ -460,7 +473,7 @@ def create_app():
 
         return PrayerTimes(
             mosque_name=result["name"],
-            date=datetime.now(EASTERN).date(),
+            date=today.date(),
             **daily_prayer_times,
             jummah1_start=format_time(normalized_llm_response["jummah1_start"]),
             jummah1_iqamah=format_time(normalized_llm_response["jummah1_iqamah"]),
