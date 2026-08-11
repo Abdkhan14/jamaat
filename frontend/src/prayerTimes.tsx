@@ -6,6 +6,7 @@ import { LoadingTerminal } from "./components/loadingTerminal";
 import LocationPinIcon from '@mui/icons-material/LocationPin';
 import CircleIcon from '@mui/icons-material/Circle';
 import MosqueIcon from '@mui/icons-material/Mosque';
+import WbTwilightIcon from '@mui/icons-material/WbTwilight';
 
 export function PrayerTimes({
     currentTime,
@@ -85,7 +86,7 @@ function PrayerTime({prayerTime, currentTime}: {prayerTime: PrayerTimes, current
                             {formatTime(prayerTime.prayer_times[start])}
                         </StyledTableCell>
                         <StyledTableCell align="right">
-                            {formatTime(prayerTime.prayer_times[iqamah])}
+                            {renderTime(prayerTime.prayer_times[iqamah], prayer)}
                         </StyledTableCell>
                         <StyledTableCell align="right">
                             {status === 'na' ?
@@ -123,6 +124,7 @@ function getStatus(iqamah_time: string | null, currentTime: Date): 'available' |
     if (!iqamah_time) return "default";
 
     const current = new Date(`1970-01-01T${easternClock(currentTime)}`);
+    const GRACE_PERIOD_MS = 3 * 60 * 1000;
 
     // Parse iqamah_time (e.g. "04:59:00" or "4:59 AM")
     const parsed = new Date(`1970-01-01T${iqamah_time}`);
@@ -131,10 +133,23 @@ function getStatus(iqamah_time: string | null, currentTime: Date): 'available' |
       // Fallback for 12h format with AM/PM - normalize to 1970 base against Eastern clock
       const tryParse = new Date(`1970-01-01 ${iqamah_time}`);
       if (isNaN(tryParse.getTime())) return "default";
-      return current < tryParse ? "available" : "finished";
+      return current.getTime() < tryParse.getTime() + GRACE_PERIOD_MS ? "available" : "finished";
     }
 
-    return current < parsed ? "available" : "finished";
+    return current.getTime() < parsed.getTime() + GRACE_PERIOD_MS ? "available" : "finished";
+}
+
+function renderTime(time: string | null, prayer?: Prayer) {
+    if (!time && prayer === Prayer.MAGHRIB) {
+        return (
+            <SunsetLabel>
+                <WbTwilightIcon sx={{ fontSize: '16px' }} />
+                Sunset
+            </SunsetLabel>
+        );
+    }
+
+    return formatTime(time);
 }
 
 function formatTime(time: string | null): string {
@@ -176,6 +191,13 @@ function formatUpdatedAt(updatedAt: string) {
 
     return `${new Intl.DateTimeFormat("en-GB", options).format(date)} ET`;
 }
+
+const SunsetLabel = styled.span`
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+`;
 
 const Status = styled.div`
     display: flex;
