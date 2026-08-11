@@ -41,6 +41,11 @@ BLOCK_MARKERS = (
     "automated access",
 )
 
+# Any time string of the form "H:MM am/pm". Used to detect carousel pages
+# where Playwright only captured hidden slides (no visible times present).
+TIME_PATTERN = re.compile(r"\d{1,2}:\d{2}\s*[apAP]\.?[mM]")
+MIN_TIMES_EXPECTED = 3
+
 # Load environment variables from a .env file
 load_dotenv()
 
@@ -236,6 +241,11 @@ def create_app():
 
                 if not text or any(m in text.lower() for m in BLOCK_MARKERS):
                     print(f"[Playwright] block page detected for {mosque['name']}, falling back to requests")
+                    await browser.close()
+                    return await asyncio.to_thread(fetch_via_requests, mosque)
+
+                if len(TIME_PATTERN.findall(text)) < MIN_TIMES_EXPECTED:
+                    print(f"[Playwright] too few times in visible text for {mosque['name']} (carousel/hidden slides?), falling back to requests")
                     await browser.close()
                     return await asyncio.to_thread(fetch_via_requests, mosque)
 
@@ -468,7 +478,11 @@ def create_app():
         }
 
         if all(v is None for v in daily_prayer_times.values()):
-            print(f"[reject] {result['name']} LLM returned only nulls, keeping existing data")
+            time_count = len(TIME_PATTERN.findall(cleaned_text))
+            print(
+                f"[reject] {result['name']} LLM returned only nulls, keeping existing data "
+                f"(input: {len(cleaned_text)} chars, {time_count} time strings detected)"
+            )
             return None
 
         return PrayerTimes(
