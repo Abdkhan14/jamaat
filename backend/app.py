@@ -46,6 +46,65 @@ BLOCK_MARKERS = (
 TIME_PATTERN = re.compile(r"\d{1,2}:\d{2}\s*[apAP]\.?[mM]")
 MIN_TIMES_EXPECTED = 3
 
+# Shared by the wait-for-times check and the all-text extractor.
+_JS_TIME_REGEX = r"/\d{1,2}:\d{2}\s*[apAP]\.?[mM]/g"
+
+_EXTRACT_VISIBLE_JS = """
+    () => {
+        const walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: (node) => {
+                    if (!node.parentElement) return NodeFilter.FILTER_REJECT;
+                    const tag = node.parentElement.tagName;
+                    if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT") {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    const style = window.getComputedStyle(node.parentElement);
+                    if (style.display === "none" || style.visibility === "hidden") {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            }
+        );
+
+        let content = [];
+        while (walker.nextNode()) {
+            const value = walker.currentNode.nodeValue.trim();
+            if (value.length > 0) content.push(value);
+        }
+        return content.join("\\n");
+    }
+"""
+
+_EXTRACT_ALL_JS = """
+    () => {
+        const walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: (node) => {
+                    if (!node.parentElement) return NodeFilter.FILTER_REJECT;
+                    const tag = node.parentElement.tagName;
+                    if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT") {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            }
+        );
+
+        let content = [];
+        while (walker.nextNode()) {
+            const value = walker.currentNode.nodeValue.trim();
+            if (value.length > 0) content.push(value);
+        }
+        return content.join("\\n");
+    }
+"""
+
 # Load environment variables from a .env file
 load_dotenv()
 
@@ -169,99 +228,97 @@ def create_app():
             print(f"[httpx] Fallback failed for {mosque['name']}: {e}")
             return None
 
-    async def scrape_mosque_playwright(mosque):
-        try:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=[
-                        "--headless=new",
-                        "--no-sandbox",
-                        "--disable-dev-shm-usage",
-                        "--disable-blink-features=AutomationControlled",
-                        "--disable-features=IsolateOrigins,site-per-process"
-                    ]
-                )
+    async def scrape_mosque_playwright(mosque, sem):
+        async with sem:
+            browser = None
+            try:
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(
+                        headless=True,
+                        args=[
+                            "--headless=new",
+                            "--no-sandbox",
+                            "--disable-dev-shm-usage",
+                            "--disable-blink-features=AutomationControlled",
+                            "--disable-features=IsolateOrigins,site-per-process"
+                        ]
+                    )
 
-                context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                    locale="en-US",
-                    timezone_id="America/Toronto",
-                    viewport={"width": 1920, "height": 1080},  # Add viewport
-                    extra_http_headers={
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                        "Accept-Language": "en-US,en;q=0.9",
-                        "Accept-Encoding": "gzip, deflate, br",
-                        "DNT": "1",
-                        "Connection": "keep-alive",
-                        "Upgrade-Insecure-Requests": "1"
-                    }
-                )
-                
-                page = await context.new_page()
-                await Stealth().apply_stealth_async(page)
-                
-                page.set_default_timeout(180_000)
-                
-                await page.goto(mosque["website"], wait_until="domcontentloaded", timeout=120_000)
+                    context = await browser.new_context(
+                        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                        locale="en-US",
+                        timezone_id="America/Toronto",
+                        viewport={"width": 1920, "height": 1080},
+                    )
 
-                await page.wait_for_timeout(2000)
+                    page = await context.new_page()
+                    await Stealth().apply_stealth_async(page)
 
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=10_000)
-                except Exception:
-                    pass
+                    page.set_default_timeout(180_000)
 
-                # Get visible text only
-                text = await page.evaluate("""
-                    () => {
-                        const walker = document.createTreeWalker(
-                            document.body,
-                            NodeFilter.SHOW_TEXT,
-                            {
-                                acceptNode: (node) => {
-                                    if (!node.parentElement) return NodeFilter.FILTER_REJECT;
-                                    const style = window.getComputedStyle(node.parentElement);
-                                    if (style.display === "none" || style.visibility === "hidden") {
-                                        return NodeFilter.FILTER_REJECT;
-                                    }
-                                    return NodeFilter.FILTER_ACCEPT;
-                                }
-                            }
-                        );
+                    await page.goto(mosque["website"], wait_until="domcontentloaded", timeout=120_000)
 
-                        let content = [];
-                        while (walker.nextNode()) {
-                            const value = walker.currentNode.nodeValue.trim();
-                            if (value.length > 0) content.push(value);
-                        }
-                        return content.join("\\n");
-                    }
-                """)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=10_000)
+                    except Exception:
+                        pass
 
-                if not text or any(m in text.lower() for m in BLOCK_MARKERS):
-                    print(f"[Playwright] block page detected for {mosque['name']}, falling back to requests")
+                    # Widget/carousel times often land in the DOM after first paint,
+                    # including on display:none slides. Wait for them anywhere in the page.
+                    try:
+                        await page.wait_for_function(
+                            f"""() => {{
+                                const t = document.body ? document.body.innerText + "\\n" + document.body.textContent : "";
+                                const m = t.match({_JS_TIME_REGEX});
+                                return m && m.length >= {MIN_TIMES_EXPECTED};
+                            }}""",
+                            timeout=20_000,
+                        )
+                    except Exception:
+                        print(f"[Playwright] timed out waiting for prayer times on {mosque['name']}")
+
+                    text = await page.evaluate(_EXTRACT_VISIBLE_JS)
+
+                    if not text or any(m in text.lower() for m in BLOCK_MARKERS):
+                        print(f"[Playwright] block page detected for {mosque['name']}, falling back to requests")
+                        await browser.close()
+                        return await asyncio.to_thread(fetch_via_requests, mosque)
+
+                    visible_times = len(TIME_PATTERN.findall(text))
+                    if visible_times < MIN_TIMES_EXPECTED:
+                        hidden_text = await page.evaluate(_EXTRACT_ALL_JS)
+                        hidden_times = len(TIME_PATTERN.findall(hidden_text))
+                        print(
+                            f"[Playwright] too few visible times for {mosque['name']} "
+                            f"({visible_times}), using hidden text ({hidden_times} times)"
+                        )
+                        if hidden_times >= MIN_TIMES_EXPECTED:
+                            text = hidden_text
+                        else:
+                            # httpx cannot see JS widgets; keep existing DB row instead.
+                            await browser.close()
+                            return None
+
                     await browser.close()
-                    return await asyncio.to_thread(fetch_via_requests, mosque)
 
-                if len(TIME_PATTERN.findall(text)) < MIN_TIMES_EXPECTED:
-                    print(f"[Playwright] too few times in visible text for {mosque['name']} (carousel/hidden slides?), falling back to requests")
-                    await browser.close()
-                    return await asyncio.to_thread(fetch_via_requests, mosque)
+                    return {
+                        **mosque,
+                        "raw_text": text
+                    }
 
-                await browser.close()
+            except Exception as e:
+                print(f"[Playwright] Failed for {mosque['name']}: {e}, falling back to requests")
+                if browser:
+                    try:
+                        await browser.close()
+                    except Exception:
+                        pass
+                return await asyncio.to_thread(fetch_via_requests, mosque)
 
-                return {
-                    **mosque,
-                    "raw_text": text
-                }
-
-        except Exception as e:
-            print(f"[Playwright] Failed for {mosque['name']}: {e}")
-            return None
-    # Asynchronous function to scrape all mosques in parallel
+    # Asynchronous function to scrape all mosques with a concurrency cap of 2
     async def scrape_all_mosques():
-        tasks = [scrape_mosque_playwright(m) for m in MOSQUES]
+        sem = asyncio.Semaphore(2)
+        tasks = [scrape_mosque_playwright(m, sem) for m in MOSQUES]
         return await asyncio.gather(*tasks)
 
     # Helper function to parse and format time strings
@@ -533,6 +590,7 @@ def create_app():
         max_instances=1,
         coalesce=True,
         misfire_grace_time=3600,
+        next_run_time=datetime.now(EASTERN),
     )
 
     if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
