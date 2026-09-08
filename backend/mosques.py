@@ -3,6 +3,7 @@ MOSQUES = [
         "name": "Baitul Aman",
         "address": "3114 Danforth Ave, Scarborough, ON M1L 1B1",
         "website": "https://timing.athanplus.com/masjid/widgets/embed?theme=1&masjid_id=rdRyqDAG&header=no&monthly=v2",
+        "use_httpx": True,
         "latitude": 43.691767549675056,
         "longitude": -79.28748266331257
     },
@@ -10,6 +11,8 @@ MOSQUES = [
         "name": "Baitul Mukarram",
         "address": "3340 Danforth Ave, Scarborough, ON M1L 1C6",
         "website": "https://bmis.ca/",
+        "scrape_url": "https://timing.athanplus.com/masjid/widgets/embed?theme=1&masjid_id=GA6gPWde&header=no&monthly=v2",
+        "use_httpx": True,
         "latitude": 43.694216937358604,
         "longitude": -79.27774140584236
     },

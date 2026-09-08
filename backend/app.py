@@ -46,62 +46,49 @@ BLOCK_MARKERS = (
 TIME_PATTERN = re.compile(r"\d{1,2}:\d{2}\s*[apAP]\.?[mM]")
 MIN_TIMES_EXPECTED = 3
 
-# Shared by the wait-for-times check and the all-text extractor.
-_JS_TIME_REGEX = r"/\d{1,2}:\d{2}\s*[apAP]\.?[mM]/g"
-
-_EXTRACT_VISIBLE_JS = """
+# Extracts all non-script/style text from a single frame (visible and hidden).
+# Run against every frame in page.frames to reach cross-origin iframes.
+_EXTRACT_TEXT_JS = """
     () => {
-        const walker = document.createTreeWalker(
-            document.body,
-            NodeFilter.SHOW_TEXT,
-            {
-                acceptNode: (node) => {
-                    if (!node.parentElement) return NodeFilter.FILTER_REJECT;
-                    const tag = node.parentElement.tagName;
-                    if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT") {
-                        return NodeFilter.FILTER_REJECT;
+        function extractFrom(root) {
+            const walker = document.createTreeWalker(
+                root,
+                NodeFilter.SHOW_TEXT,
+                {
+                    acceptNode: (node) => {
+                        if (!node.parentElement) return NodeFilter.FILTER_REJECT;
+                        const tag = node.parentElement.tagName;
+                        if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT") {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                        return NodeFilter.FILTER_ACCEPT;
                     }
-                    const style = window.getComputedStyle(node.parentElement);
-                    if (style.display === "none" || style.visibility === "hidden") {
-                        return NodeFilter.FILTER_REJECT;
-                    }
-                    return NodeFilter.FILTER_ACCEPT;
+                }
+            );
+            const parts = [];
+            while (walker.nextNode()) {
+                const v = walker.currentNode.nodeValue.trim();
+                if (v.length > 0) parts.push(v);
+            }
+            return parts.join("\\n");
+        }
+
+        // Walk open shadow roots attached to elements in the main doc
+        function collectShadowText(root) {
+            const out = [];
+            const all = root.querySelectorAll("*");
+            for (const el of all) {
+                if (el.shadowRoot) {
+                    out.push(extractFrom(el.shadowRoot));
+                    out.push(collectShadowText(el.shadowRoot));
                 }
             }
-        );
-
-        let content = [];
-        while (walker.nextNode()) {
-            const value = walker.currentNode.nodeValue.trim();
-            if (value.length > 0) content.push(value);
+            return out.join("\\n");
         }
-        return content.join("\\n");
-    }
-"""
 
-_EXTRACT_ALL_JS = """
-    () => {
-        const walker = document.createTreeWalker(
-            document.body,
-            NodeFilter.SHOW_TEXT,
-            {
-                acceptNode: (node) => {
-                    if (!node.parentElement) return NodeFilter.FILTER_REJECT;
-                    const tag = node.parentElement.tagName;
-                    if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT") {
-                        return NodeFilter.FILTER_REJECT;
-                    }
-                    return NodeFilter.FILTER_ACCEPT;
-                }
-            }
-        );
-
-        let content = [];
-        while (walker.nextNode()) {
-            const value = walker.currentNode.nodeValue.trim();
-            if (value.length > 0) content.push(value);
-        }
-        return content.join("\\n");
+        const mainText = extractFrom(document.body || document.documentElement);
+        const shadowText = collectShadowText(document.body || document.documentElement);
+        return [mainText, shadowText].filter(Boolean).join("\\n");
     }
 """
 
@@ -208,29 +195,106 @@ def create_app():
             print(f"[OpenAI] Failed: {e}")
             return None
 
-    def fetch_via_requests(mosque):
+    def fetch_via_requests(mosque, retries: int = 3, backoff: float = 3.0):
         # NOTE: Some mosque WAFs (e.g. irccan.com) block requests that claim to be
         # a browser via a spoofed User-Agent but lack a matching browser TLS
         # fingerprint. A plain client with a consistent fingerprint is served
         # normally, so we intentionally do NOT send browser-spoofing headers here.
+        url = mosque.get("scrape_url") or mosque["website"]
+        last_exc = None
+        for attempt in range(1, retries + 1):
+            try:
+                with httpx.Client(timeout=20, follow_redirects=True) as client:
+                    response = client.get(url)
+                    response.raise_for_status()
+
+                soup = BeautifulSoup(response.text, "html.parser")
+                for tag in soup(["script", "style", "noscript"]):
+                    tag.decompose()
+
+                text = soup.get_text(separator="\n")
+                if attempt > 1:
+                    print(f"[httpx] {mosque['name']} succeeded on attempt {attempt}")
+                return {**mosque, "raw_text": text}
+            except Exception as e:
+                last_exc = e
+                print(f"[httpx] Attempt {attempt}/{retries} failed for {mosque['name']}: {e}")
+                if attempt < retries:
+                    import time as _time
+                    _time.sleep(backoff * attempt)
+
+        print(f"[httpx] All {retries} attempts failed for {mosque['name']}")
+        return None
+
+    async def _collect_frame_text(page) -> str:
+        """Extract text from every frame (including cross-origin iframes) and shadow roots."""
+        parts = []
+        for frame in page.frames:
+            try:
+                t = await frame.evaluate(_EXTRACT_TEXT_JS)
+                if t:
+                    parts.append(t)
+            except Exception:
+                pass
+        return "\n".join(parts)
+
+    async def scrape_mosque_on_page(mosque, page) -> dict | None:
+        """Navigate to one mosque and return its raw text, or None to keep existing DB row."""
         try:
-            with httpx.Client(timeout=20, follow_redirects=True) as client:
-                response = client.get(mosque["website"])
-                response.raise_for_status()
+            scrape_url = mosque.get("scrape_url") or mosque["website"]
+            await page.goto(scrape_url, wait_until="domcontentloaded", timeout=120_000)
 
-            soup = BeautifulSoup(response.text, "html.parser")
-            for tag in soup(["script", "style", "noscript"]):
-                tag.decompose()
+            # Poll all frames every 500ms until MIN_TIMES_EXPECTED times appear, up to 45s.
+            # networkidle is intentionally skipped — prayer widgets never go idle.
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + 45
+            text = ""
+            while loop.time() < deadline:
+                text = await _collect_frame_text(page)
+                if len(TIME_PATTERN.findall(text)) >= MIN_TIMES_EXPECTED:
+                    break
+                await asyncio.sleep(0.5)
+            else:
+                # Final snapshot after deadline
+                text = await _collect_frame_text(page)
 
-            text = soup.get_text(separator="\n")
+            if not text or any(m in text.lower() for m in BLOCK_MARKERS):
+                print(f"[Playwright] block page detected for {mosque['name']}, falling back to requests")
+                return await asyncio.to_thread(fetch_via_requests, mosque)
+
+            time_count = len(TIME_PATTERN.findall(text))
+            if time_count < MIN_TIMES_EXPECTED:
+                print(
+                    f"[Playwright] too few times for {mosque['name']} after 45s "
+                    f"({time_count} found), keeping existing data"
+                )
+                return None
+
             return {**mosque, "raw_text": text}
-        except Exception as e:
-            print(f"[httpx] Fallback failed for {mosque['name']}: {e}")
-            return None
 
-    async def scrape_mosque_playwright(mosque, sem):
-        async with sem:
-            browser = None
+        except Exception as e:
+            print(f"[Playwright] Failed for {mosque['name']}: {e}, falling back to requests")
+            return await asyncio.to_thread(fetch_via_requests, mosque)
+
+    async def scrape_all_mosques():
+        """Scrape all mosques sequentially.
+
+        Mosques flagged use_httpx=True are fetched with httpx directly — their
+        scrape URLs are server-rendered and don't need a browser. The rest go
+        through Playwright under one shared Chromium instance.
+        """
+        httpx_mosques = [m for m in MOSQUES if m.get("use_httpx")]
+        playwright_mosques = [m for m in MOSQUES if not m.get("use_httpx")]
+
+        results = []
+
+        # httpx path — fast, no JS engine needed
+        for mosque in httpx_mosques:
+            result = await asyncio.to_thread(fetch_via_requests, mosque)
+            results.append(result)
+
+        # Playwright path — only for mosques that need a real browser
+        if playwright_mosques:
             try:
                 async with async_playwright() as p:
                     browser = await p.chromium.launch(
@@ -240,10 +304,9 @@ def create_app():
                             "--no-sandbox",
                             "--disable-dev-shm-usage",
                             "--disable-blink-features=AutomationControlled",
-                            "--disable-features=IsolateOrigins,site-per-process"
+                            "--disable-features=IsolateOrigins,site-per-process",
                         ]
                     )
-
                     context = await browser.new_context(
                         user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                         locale="en-US",
@@ -251,75 +314,19 @@ def create_app():
                         viewport={"width": 1920, "height": 1080},
                     )
 
-                    page = await context.new_page()
-                    await Stealth().apply_stealth_async(page)
-
-                    page.set_default_timeout(180_000)
-
-                    await page.goto(mosque["website"], wait_until="domcontentloaded", timeout=120_000)
-
-                    try:
-                        await page.wait_for_load_state("networkidle", timeout=10_000)
-                    except Exception:
-                        pass
-
-                    # Widget/carousel times often land in the DOM after first paint,
-                    # including on display:none slides. Wait for them anywhere in the page.
-                    try:
-                        await page.wait_for_function(
-                            f"""() => {{
-                                const t = document.body ? document.body.innerText + "\\n" + document.body.textContent : "";
-                                const m = t.match({_JS_TIME_REGEX});
-                                return m && m.length >= {MIN_TIMES_EXPECTED};
-                            }}""",
-                            timeout=20_000,
-                        )
-                    except Exception:
-                        print(f"[Playwright] timed out waiting for prayer times on {mosque['name']}")
-
-                    text = await page.evaluate(_EXTRACT_VISIBLE_JS)
-
-                    if not text or any(m in text.lower() for m in BLOCK_MARKERS):
-                        print(f"[Playwright] block page detected for {mosque['name']}, falling back to requests")
-                        await browser.close()
-                        return await asyncio.to_thread(fetch_via_requests, mosque)
-
-                    visible_times = len(TIME_PATTERN.findall(text))
-                    if visible_times < MIN_TIMES_EXPECTED:
-                        hidden_text = await page.evaluate(_EXTRACT_ALL_JS)
-                        hidden_times = len(TIME_PATTERN.findall(hidden_text))
-                        print(
-                            f"[Playwright] too few visible times for {mosque['name']} "
-                            f"({visible_times}), using hidden text ({hidden_times} times)"
-                        )
-                        if hidden_times >= MIN_TIMES_EXPECTED:
-                            text = hidden_text
-                        else:
-                            # httpx cannot see JS widgets; keep existing DB row instead.
-                            await browser.close()
-                            return None
+                    for mosque in playwright_mosques:
+                        page = await context.new_page()
+                        await Stealth().apply_stealth_async(page)
+                        page.set_default_timeout(180_000)
+                        result = await scrape_mosque_on_page(mosque, page)
+                        results.append(result)
+                        await page.close()
 
                     await browser.close()
-
-                    return {
-                        **mosque,
-                        "raw_text": text
-                    }
-
             except Exception as e:
-                print(f"[Playwright] Failed for {mosque['name']}: {e}, falling back to requests")
-                if browser:
-                    try:
-                        await browser.close()
-                    except Exception:
-                        pass
-                return await asyncio.to_thread(fetch_via_requests, mosque)
+                print(f"[Playwright] Browser-level error: {e}")
 
-    # Asynchronous function to scrape all mosques with a concurrency cap of 2
-    async def scrape_all_mosques():
-        sem = asyncio.Semaphore(2)
-        tasks = [scrape_mosque_playwright(m, sem) for m in MOSQUES]
-        return await asyncio.gather(*tasks)
+        return results
 
     # Helper function to parse and format time strings
     def format_time(value):
