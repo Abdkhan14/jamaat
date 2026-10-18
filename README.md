@@ -93,6 +93,23 @@ npm run dev
 
 The app will be available at `http://localhost:5173`.
 
+## Running tests
+
+### Backend
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm test
+```
+
 ## Docs
 
 [`docs/backend.md`](docs/backend.md) — End-to-end walkthrough of the backend: scraping, LLM extraction, database, API routes, scheduler, and deployment.
