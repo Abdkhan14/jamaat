@@ -13,4 +13,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image
-        run: docker build ./backend
+        run: docker build -t jamaat-backend ./backend
+      - name: Syntax and import check
+        run: |
+          docker run --rm \
+            -e OPENAI_API_KEY=ci-placeholder \
+            jamaat-backend \
+            python -c "
+          import compileall, sys
+          ok = compileall.compile_dir('.', quiet=1)
+          if not ok:
+              sys.exit(1)
+          import routes, scheduler, scraping.pipeline
+          print('imports OK')
+          "
