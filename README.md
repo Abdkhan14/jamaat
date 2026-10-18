@@ -2,7 +2,7 @@
 
 **Live:** [jamaat-chi.vercel.app](https://jamaat-chi.vercel.app)
 
-A full-stack web app that aggregates daily prayer times from mosques in Scarborough, ON. It scrapes each mosque's website using Playwright, extracts structured prayer times via an OpenAI LLM, and serves them through a REST API to a React frontend.
+A full-stack web app that aggregates daily prayer times from mosques in Scarborough, ON. It scrapes each mosque's website using httpx + BeautifulSoup, extracts structured prayer times via an OpenAI LLM, and serves them through a REST API to a React frontend.
 
 ## Features
 
@@ -23,7 +23,7 @@ A full-stack web app that aggregates daily prayer times from mosques in Scarboro
 
 ## Tech Stack
 
-**Backend** — Python, Flask, Flask-SQLAlchemy, Playwright, APScheduler, OpenAI API
+**Backend** — Python, Flask, Flask-SQLAlchemy, httpx, BeautifulSoup, APScheduler, OpenAI API
 
 **Frontend** — React 19, TypeScript, Vite, MUI, TanStack Query, styled-components
 
@@ -55,7 +55,6 @@ jamaat/
 ```bash
 cd backend
 pip install -r requirements.txt
-playwright install chromium
 ```
 
 Create a `.env` file:
@@ -81,6 +80,10 @@ npm run dev
 ```
 
 The app will be available at `http://localhost:5173`.
+
+## Docs
+
+[`docs/backend.md`](docs/backend.md) — End-to-end walkthrough of the backend: scraping, LLM extraction, database, API routes, scheduler, and deployment.
 
 ## API
 

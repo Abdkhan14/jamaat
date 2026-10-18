@@ -17,80 +17,12 @@ import json
 from openai import OpenAI
 from flask_cors import CORS
 import re
-from playwright.async_api import async_playwright
-from playwright_stealth import Stealth
 from bs4 import BeautifulSoup
 import httpx
 
-BLOCK_MARKERS = (
-    # Generic 403 phrases
-    "403 - forbidden",
-    "403 forbidden",
-    "error 403",
-    "access to this page is forbidden",
-    "access denied",
-    "you have been blocked",
-    # Cloudflare challenge pages
-    "just a moment",
-    "checking your browser",
-    "enable javascript and cookies to continue",
-    "attention required! | cloudflare",
-    # Bot / captcha walls
-    "are you human",
-    "complete the captcha",
-    "automated access",
-)
-
-# Any time string of the form "H:MM am/pm". Used to detect carousel pages
-# where Playwright only captured hidden slides (no visible times present).
+# Matches any time string of the form "H:MM am/pm". Used to count time strings
+# in scraped text for diagnostic logging when the LLM returns all-null times.
 TIME_PATTERN = re.compile(r"\d{1,2}:\d{2}\s*[apAP]\.?[mM]")
-MIN_TIMES_EXPECTED = 3
-
-# Extracts all non-script/style text from a single frame (visible and hidden).
-# Run against every frame in page.frames to reach cross-origin iframes.
-_EXTRACT_TEXT_JS = """
-    () => {
-        function extractFrom(root) {
-            const walker = document.createTreeWalker(
-                root,
-                NodeFilter.SHOW_TEXT,
-                {
-                    acceptNode: (node) => {
-                        if (!node.parentElement) return NodeFilter.FILTER_REJECT;
-                        const tag = node.parentElement.tagName;
-                        if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT") {
-                            return NodeFilter.FILTER_REJECT;
-                        }
-                        return NodeFilter.FILTER_ACCEPT;
-                    }
-                }
-            );
-            const parts = [];
-            while (walker.nextNode()) {
-                const v = walker.currentNode.nodeValue.trim();
-                if (v.length > 0) parts.push(v);
-            }
-            return parts.join("\\n");
-        }
-
-        // Walk open shadow roots attached to elements in the main doc
-        function collectShadowText(root) {
-            const out = [];
-            const all = root.querySelectorAll("*");
-            for (const el of all) {
-                if (el.shadowRoot) {
-                    out.push(extractFrom(el.shadowRoot));
-                    out.push(collectShadowText(el.shadowRoot));
-                }
-            }
-            return out.join("\\n");
-        }
-
-        const mainText = extractFrom(document.body || document.documentElement);
-        const shadowText = collectShadowText(document.body || document.documentElement);
-        return [mainText, shadowText].filter(Boolean).join("\\n");
-    }
-"""
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -226,107 +158,9 @@ def create_app():
         print(f"[httpx] All {retries} attempts failed for {mosque['name']}")
         return None
 
-    async def _collect_frame_text(page) -> str:
-        """Extract text from every frame (including cross-origin iframes) and shadow roots."""
-        parts = []
-        for frame in page.frames:
-            try:
-                t = await frame.evaluate(_EXTRACT_TEXT_JS)
-                if t:
-                    parts.append(t)
-            except Exception:
-                pass
-        return "\n".join(parts)
-
-    async def scrape_mosque_on_page(mosque, page) -> dict | None:
-        """Navigate to one mosque and return its raw text, or None to keep existing DB row."""
-        try:
-            scrape_url = mosque.get("scrape_url") or mosque["website"]
-            await page.goto(scrape_url, wait_until="domcontentloaded", timeout=120_000)
-
-            # Poll all frames every 500ms until MIN_TIMES_EXPECTED times appear, up to 45s.
-            # networkidle is intentionally skipped — prayer widgets never go idle.
-            loop = asyncio.get_running_loop()
-            deadline = loop.time() + 45
-            text = ""
-            while loop.time() < deadline:
-                text = await _collect_frame_text(page)
-                if len(TIME_PATTERN.findall(text)) >= MIN_TIMES_EXPECTED:
-                    break
-                await asyncio.sleep(0.5)
-            else:
-                # Final snapshot after deadline
-                text = await _collect_frame_text(page)
-
-            if not text or any(m in text.lower() for m in BLOCK_MARKERS):
-                print(f"[Playwright] block page detected for {mosque['name']}, falling back to requests")
-                return await asyncio.to_thread(fetch_via_requests, mosque)
-
-            time_count = len(TIME_PATTERN.findall(text))
-            if time_count < MIN_TIMES_EXPECTED:
-                print(
-                    f"[Playwright] too few times for {mosque['name']} after 45s "
-                    f"({time_count} found), keeping existing data"
-                )
-                return None
-
-            return {**mosque, "raw_text": text}
-
-        except Exception as e:
-            print(f"[Playwright] Failed for {mosque['name']}: {e}, falling back to requests")
-            return await asyncio.to_thread(fetch_via_requests, mosque)
-
     async def scrape_all_mosques():
-        """Scrape all mosques sequentially.
-
-        Mosques flagged use_httpx=True are fetched with httpx directly — their
-        scrape URLs are server-rendered and don't need a browser. The rest go
-        through Playwright under one shared Chromium instance.
-        """
-        httpx_mosques = [m for m in MOSQUES if m.get("use_httpx")]
-        playwright_mosques = [m for m in MOSQUES if not m.get("use_httpx")]
-
-        results = []
-
-        # httpx path — fast, no JS engine needed
-        for mosque in httpx_mosques:
-            result = await asyncio.to_thread(fetch_via_requests, mosque)
-            results.append(result)
-
-        # Playwright path — only for mosques that need a real browser
-        if playwright_mosques:
-            try:
-                async with async_playwright() as p:
-                    browser = await p.chromium.launch(
-                        headless=True,
-                        args=[
-                            "--headless=new",
-                            "--no-sandbox",
-                            "--disable-dev-shm-usage",
-                            "--disable-blink-features=AutomationControlled",
-                            "--disable-features=IsolateOrigins,site-per-process",
-                        ]
-                    )
-                    context = await browser.new_context(
-                        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                        locale="en-US",
-                        timezone_id="America/Toronto",
-                        viewport={"width": 1920, "height": 1080},
-                    )
-
-                    for mosque in playwright_mosques:
-                        page = await context.new_page()
-                        await Stealth().apply_stealth_async(page)
-                        page.set_default_timeout(180_000)
-                        result = await scrape_mosque_on_page(mosque, page)
-                        results.append(result)
-                        await page.close()
-
-                    await browser.close()
-            except Exception as e:
-                print(f"[Playwright] Browser-level error: {e}")
-
-        return results
+        """Fetch every mosque's page text sequentially via httpx."""
+        return [await asyncio.to_thread(fetch_via_requests, m) for m in MOSQUES]
 
     # Helper function to parse and format time strings
     def format_time(value):
