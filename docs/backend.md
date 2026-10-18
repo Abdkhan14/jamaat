@@ -40,15 +40,25 @@ flowchart TD
 ## File Map
 
 
-| File                    | What it does                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------- |
-| `app.py`                | Everything: Flask app factory, scraping logic, LLM calls, scheduler setup, API routes |
-| `mosques.py`            | Static list of mosques with metadata and per-mosque scraping config                   |
-| `config.py`             | SQLAlchemy URI built from `DATABASE_PATH` env var                                     |
-| `models/prayerTimes.py` | SQLAlchemy model for the `prayer_times` table + `to_dict()` serializer                |
-| `Dockerfile`            | Container image (python:3.12-slim), gunicorn entry point                              |
-| `fly.toml`              | Fly.io deployment: region, volume mount, machine settings                             |
-| `requirements.txt`      | Python dependencies                                                                   |
+| File                          | What it does                                                                       |
+| ----------------------------- | ---------------------------------------------------------------------------------- |
+| `app.py`                      | Flask app factory — CORS, DB init, register routes, start scheduler                |
+| `scheduler.py`                | APScheduler setup, cron job registration, WERKZEUG guard, atexit shutdown          |
+| `config.py`                   | SQLAlchemy URI from `DATABASE_PATH` env var; `EASTERN` timezone constant           |
+| `mosques.py`                  | Static list of mosques with metadata and per-mosque scraping config                |
+| `models/prayerTimes.py`       | SQLAlchemy model for the `prayer_times` table + `to_dict()` serializer             |
+| `routes/health.py`            | `GET /health`                                                                      |
+| `routes/prayer_times.py`      | `GET /prayer-times`                                                                |
+| `routes/mosque_requests.py`   | `POST /mosque-request` — validation and Google Sheets webhook forwarding           |
+| `scraping/fetch.py`           | `fetch_via_requests`, `scrape_all_mosques` — httpx scraping with retry             |
+| `scraping/text.py`            | `clean_text`, `TIME_PATTERN` — normalise raw scraped text before hashing/prompting |
+| `scraping/prompt.py`          | `PROMPT_TEMPLATE`, `build_prompt` — assemble the LLM prompt with today's date      |
+| `scraping/llm.py`             | OpenAI client, `call_llm` — call GPT and parse JSON response                      |
+| `scraping/parsing.py`         | `format_time`, `normalize_prayer_times`, prayer name constants                     |
+| `scraping/pipeline.py`        | `process_mosque`, `run_all`, `scrape_and_update` — orchestrates the full pipeline  |
+| `Dockerfile`                  | Container image (python:3.12-slim), gunicorn entry point                           |
+| `fly.toml`                    | Fly.io deployment: region, volume mount, machine settings                          |
+| `requirements.txt`            | Python dependencies                                                                |
 
 
 ---
@@ -61,12 +71,12 @@ flowchart TD
 
 **Order of operations:**
 
-1. `load_dotenv()` reads `.env` before anything else.
-2. The OpenAI client is created at **module import time** (line ~99), *before* `create_app` is called. If `OPENAI_API_KEY` is missing from the environment, the process crashes immediately on startup.
-3. CORS origins are read from `ALLOWED_ORIGINS`. It accepts a comma-separated list so you can allow multiple frontends. Default: `http://localhost:5173`.
-4. `Config` resolves the database path: it reads `DATABASE_PATH` from the environment and falls back to `prayer_times.db` in the same directory as `config.py`. SQLAlchemy is initialized with that URI.
+1. `load_dotenv()` reads `.env` as the very first statement in `app.py`, before any local imports. This is required because `scraping/llm.py` creates the OpenAI client at import time from `os.environ["OPENAI_API_KEY"]` — if the key is missing, the process crashes immediately.
+2. CORS origins are read from `ALLOWED_ORIGINS`. It accepts a comma-separated list so you can allow multiple frontends. Default: `http://localhost:5173`.
+3. `Config` resolves the database path: it reads `DATABASE_PATH` from the environment and falls back to `prayer_times.db` in the same directory as `config.py`. SQLAlchemy is initialized with that URI.
+4. `register_routes(app)` registers the three blueprints from `routes/`.
 5. `db.create_all()` runs inside an app context, creating the `prayer_times` table if it doesn't exist yet.
-6. The APScheduler `BackgroundScheduler` is created and the cron job is registered with `next_run_time=now`, causing an immediate first run.
+6. `start_scheduler(app)` (in `scheduler.py`) creates the APScheduler `BackgroundScheduler` and registers the cron job with `next_run_time=now`, causing an immediate first run.
 7. `atexit.register(scheduler.shutdown)` ensures the scheduler stops cleanly when the process exits.
 
 ---
@@ -168,7 +178,7 @@ After cleaning, `process_mosque` computes a SHA-256 hash of the cleaned text and
 
 
 
-## LLM Extraction (`call_llm` + `PROMPT_TEMPLATE`)
+## LLM Extraction (`scraping/llm.py` + `scraping/prompt.py`)
 
 
 
@@ -559,9 +569,7 @@ curl http://localhost:5000/health
 
 These are factual observations about the current code, not bugs to fix immediately.
 
-1. **Misleading** `run_all` **docstring** — The docstring on `run_all` says scraping happens "in parallel", but mosques are actually scraped one at a time in a sequential loop. Only the LLM calls (in `asyncio.gather`) run concurrently.
-2. **Missing Jummah key causes a** `KeyError` — In `process_mosque`, the code accesses `normalized_llm_response["jummah1_start"]` etc. with direct dict access (no `.get()`). If the LLM omits any `jummah`* key from its JSON, a `KeyError` is raised. Because `asyncio.gather` is called without `return_exceptions=True`, a single mosque's error will bubble up and **prevent all mosques from being saved** in that run.
-3. **Debug file left in production** — For "Masjid Al-Abedeen", the full prompt is written to `prompt_abedeen.txt` on every run where the content has changed. This file is excluded by `.dockerignore` but still gets written inside the running container.
-4. `client` **name collision** — Inside `fetch_via_requests`, the local variable `client` (`httpx.Client(...)`) shadows the global `client` (the OpenAI client). Python resolves this correctly because they're in different scopes, but it makes the function harder to read.
-5. **Stale** `date` **on hash-skip** — When a mosque's content hash is unchanged, its row is not written. The `date` column stays set to whenever the content last changed, not today's date. The frontend receives an older `date` value even if the times are still accurate.
+1. **Missing Jummah key causes a** `KeyError` — In `process_mosque` (`scraping/pipeline.py`), Jummah fields are accessed with direct dict keys (no `.get()`). If the LLM omits any `jummah*` key from its JSON, a `KeyError` is raised. Because `asyncio.gather` is called without `return_exceptions=True`, a single mosque's error will bubble up and **prevent all mosques from being saved** in that run.
+2. **Debug file left in production** — For "Masjid Al-Abedeen", the full prompt is written to `prompt_abedeen.txt` on every run where the content has changed. This file is excluded by `.dockerignore` but still gets written inside the running container.
+3. **Stale** `date` **on hash-skip** — When a mosque's content hash is unchanged, its row is not written. The `date` column stays set to whenever the content last changed, not today's date. The frontend receives an older `date` value even if the times are still accurate.
 

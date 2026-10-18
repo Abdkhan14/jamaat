@@ -32,11 +32,23 @@ A full-stack web app that aggregates daily prayer times from mosques in Scarboro
 ```
 jamaat/
 ├── backend/
-│   ├── app.py          # Flask app, scraping logic, LLM extraction, scheduler
-│   ├── mosques.py      # Mosque registry (name, address, website, coordinates)
-│   ├── config.py       # App configuration
+│   ├── app.py              # Flask app factory — wires CORS, DB, routes, and scheduler
+│   ├── scheduler.py        # APScheduler setup and cron job registration
+│   ├── config.py           # App configuration and EASTERN timezone constant
+│   ├── mosques.py          # Mosque registry (name, address, website, coordinates)
 │   ├── models/
-│   │   └── prayerTimes.py
+│   │   └── prayerTimes.py  # SQLAlchemy model and serializer
+│   ├── routes/
+│   │   ├── health.py           # GET /health
+│   │   ├── prayer_times.py     # GET /prayer-times
+│   │   └── mosque_requests.py  # POST /mosque-request
+│   ├── scraping/
+│   │   ├── fetch.py        # httpx scraping and retry logic
+│   │   ├── text.py         # clean_text and TIME_PATTERN
+│   │   ├── prompt.py       # PROMPT_TEMPLATE and build_prompt
+│   │   ├── llm.py          # OpenAI client and call_llm
+│   │   ├── parsing.py      # format_time, normalize_prayer_times, prayer name constants
+│   │   └── pipeline.py     # process_mosque, run_all, scrape_and_update
 │   └── requirements.txt
 └── frontend/
     ├── src/
