@@ -11,7 +11,7 @@ def test_returns_503_without_webhook_env(client, monkeypatch):
     assert resp.status_code == 503
 
 
-def test_returns_400_when_name_missing(client):
+def test_returns_400_when_name_missing(client, webhook_env):
     resp = client.post("/mosque-request", json={})
     assert resp.status_code == 400
 
