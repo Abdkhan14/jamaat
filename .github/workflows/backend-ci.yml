@@ -3,9 +3,6 @@ name: Backend CI
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "backend/**"
-      - ".github/workflows/backend-ci.yml"
 
 jobs:
   build:
@@ -27,3 +24,13 @@ jobs:
           import routes, scheduler, scraping.pipeline
           print('imports OK')
           "
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run backend tests
+        working-directory: backend
+        env:
+          OPENAI_API_KEY: ci-placeholder
+        run: |
+          pip install -q -r requirements-dev.txt
+          python -m pytest -q
