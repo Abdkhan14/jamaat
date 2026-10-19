@@ -6,17 +6,18 @@ from openai import OpenAI
 OPENAI_MODEL = "gpt-5.1"
 MAX_COMPLETION_TOKENS = 500
 LLM_TIMEOUT = 30
+SYSTEM_MESSAGE = "You are a helpful assistant that only outputs valid JSON objects."
 
 # Created on import: load_dotenv() in app.py must run before this module is imported.
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 
-def call_llm(prompt: str):
+def call_llm(prompt: str, model: str = OPENAI_MODEL):
     try:
         response = client.chat.completions.create(
-            model=OPENAI_MODEL,
+            model=model,
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that only outputs valid JSON objects."},
+                {"role": "system", "content": SYSTEM_MESSAGE},
                 {"role": "user", "content": prompt},
             ],
             max_completion_tokens=MAX_COMPLETION_TOKENS,

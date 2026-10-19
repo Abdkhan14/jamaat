@@ -6,7 +6,7 @@ from config import EASTERN
 from models.prayerTimes import PrayerTimes, db
 from scraping.fetch import scrape_all_mosques
 from scraping.llm import call_llm
-from scraping.parsing import DAILY_PRAYERS, JUMMAH_SLOTS, format_time, normalize_prayer_times
+from scraping.parsing import DAILY_PRAYERS, to_prayer_fields
 from scraping.prompt import build_prompt
 from scraping.text import TIME_PATTERN, clean_text
 
@@ -28,19 +28,14 @@ async def process_mosque(result):
     if not llm_response_json:
         return None
 
-    normalized = normalize_prayer_times(llm_response_json)
-
     if result.get("name") == "Masjid Al-Abedeen":
         with open("prompt_abedeen.txt", "w", encoding="utf-8") as f:
             f.write(prompt)
 
-    daily_times = {
-        f"{p}_{slot}": format_time(normalized[f"{p}_{slot}"])
-        for p in DAILY_PRAYERS
-        for slot in ("start", "iqamah")
-    }
+    fields = to_prayer_fields(llm_response_json)
 
-    if all(v is None for v in daily_times.values()):
+    daily_values = [fields[f"{p}_{slot}"] for p in DAILY_PRAYERS for slot in ("start", "iqamah")]
+    if all(v is None for v in daily_values):
         time_count = len(TIME_PATTERN.findall(cleaned_text))
         print(
             f"[reject] {result['name']} LLM returned only nulls, keeping existing data "
@@ -48,17 +43,10 @@ async def process_mosque(result):
         )
         return None
 
-    jummah_times = {
-        f"{slot}_{part}": format_time(normalized[f"{slot}_{part}"])
-        for slot in JUMMAH_SLOTS
-        for part in ("start", "iqamah")
-    }
-
     return PrayerTimes(
         mosque_name=result["name"],
         date=today.date(),
-        **daily_times,
-        **jummah_times,
+        **fields,
         raw_text_hash=content_hash,
         updated_at=datetime.now(timezone.utc),
     )

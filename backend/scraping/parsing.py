@@ -38,3 +38,20 @@ def normalize_prayer_times(prayer_json):
         )
 
     return prayer_json
+
+
+def to_prayer_fields(llm_json: dict) -> dict:
+    """Normalize and format all 16 prayer time fields from raw LLM JSON output."""
+    normalized = normalize_prayer_times(llm_json)
+
+    daily = {
+        f"{p}_{slot}": format_time(normalized[f"{p}_{slot}"])
+        for p in DAILY_PRAYERS
+        for slot in ("start", "iqamah")
+    }
+    jummah = {
+        f"{slot}_{part}": format_time(normalized[f"{slot}_{part}"])
+        for slot in JUMMAH_SLOTS
+        for part in ("start", "iqamah")
+    }
+    return {**daily, **jummah}
