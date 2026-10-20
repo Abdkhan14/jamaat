@@ -1,0 +1,18 @@
+{
+  "fajr_start": null,
+  "fajr_iqamah": "6:00 AM",
+  "zuhr_start": null,
+  "zuhr_iqamah": "1:30 PM",
+  "asr_start": null,
+  "asr_iqamah": "6:00 PM",
+  "maghrib_start": null,
+  "maghrib_iqamah": "8:05 PM",
+  "isha_start": null,
+  "isha_iqamah": "10:00 PM",
+  "jummah1_start": null,
+  "jummah1_iqamah": null,
+  "jummah2_start": null,
+  "jummah2_iqamah": null,
+  "jummah3_start": null,
+  "jummah3_iqamah": null
+}

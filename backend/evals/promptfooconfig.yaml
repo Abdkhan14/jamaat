@@ -1,0 +1,30 @@
+# Local comparison matrix — run from backend/ with:
+#   PYTHONPATH=. PROMPTFOO_PYTHON=.venv/bin/python \
+#     npx promptfoo@0.124.1 eval -c evals/promptfooconfig.yaml
+#   npx promptfoo@0.124.1 view
+
+prompts:
+  - file://prompts.py:current
+  # Add candidate prompt functions here when comparing alternatives:
+  # - file://prompts.py:candidate
+
+providers:
+  - id: file://provider.py
+    label: gpt-5.1
+    config:
+      model: gpt-5.1
+  - id: file://provider.py
+    label: gpt-5-mini
+    config:
+      model: gpt-5-mini
+
+tests: file://cases.yaml
+
+defaultTest:
+  assert:
+    - type: python
+      value: file://scorer.py
+
+evaluateOptions:
+  repeat: 3
+  maxConcurrency: 4

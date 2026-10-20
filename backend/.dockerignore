@@ -11,3 +11,4 @@ prompt_abedeen.txt
 tests/
 pytest.ini
 requirements-dev.txt
+evals/

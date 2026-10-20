@@ -1,0 +1,19 @@
+Prayer Times
+
+Fajr    5:00 AM   6:00 AM
+Zuhr    1:00 PM   1:30 PM
+Asr     5:00 PM   6:00 PM
+Maghrib 8:00 PM   8:05 PM
+Isha    9:30 PM  10:00 PM
+
+Fajr    5:20 AM   6:20 AM
+Zuhr    1:05 PM   1:35 PM
+Asr     5:05 PM   6:05 PM
+Maghrib 8:02 PM   8:07 PM
+Isha    9:32 PM  10:02 PM
+
+Fajr    5:40 AM   6:40 AM
+Zuhr    1:10 PM   1:40 PM
+Asr     5:10 PM   6:10 PM
+Maghrib 8:04 PM   8:09 PM
+Isha    9:34 PM  10:04 PM

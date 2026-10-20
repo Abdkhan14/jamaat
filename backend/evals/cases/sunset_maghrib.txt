@@ -1,0 +1,7 @@
+Prayer Times
+
+Fajr    5:00 AM   6:00 AM
+Zuhr    1:00 PM   1:30 PM
+Asr     5:00 PM   6:00 PM
+Maghrib           Sunset
+Isha    9:30 PM  10:00 PM
