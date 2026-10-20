@@ -112,7 +112,7 @@ npm test
 
 ## Evals
 
-LLM evals score the `scraped text → prayer times JSON` step using [promptfoo](https://www.promptfoo.dev/). They call the real OpenAI API and cost a few cents per run (~12 cases × 3 repeats = 36 API calls).
+LLM evals score the `scraped text → prayer times JSON` step using [promptfoo](https://www.promptfoo.dev/). They call the real OpenAI API and cost a few cents per run (~12 cases × 3 repeats = 36 calls against `gpt-5.1`).
 
 ### Run locally
 
@@ -123,18 +123,15 @@ PYTHONPATH=. PROMPTFOO_PYTHON=.venv/bin/python \
 npx promptfoo@0.124.1 view   # opens a local results grid
 ```
 
-### Compare two prompts
+### Compare two prompts or models
 
-1. Add a candidate function to `backend/evals/prompts.py` alongside `current`.
-2. Uncomment the candidate entry in `evals/promptfooconfig.yaml`.
-3. Run as above — the results grid shows both columns side by side.
+1. Add a candidate prompt function to `backend/evals/prompts.py` alongside `current`, or uncomment the second provider block in `evals/promptfooconfig.yaml` and set a model name.
+2. Run as above — the results grid shows one column per prompt/model combination.
 
 ### Add a case
 
 1. Add `evals/cases/<name>.txt` (the raw scraped text) and `evals/cases/<name>.expected.json` (the 16 correct fields).
 2. Add an entry to `evals/cases.yaml` with `text`, `today`, `expected`, and a `tags` list.
-
-**Cost note:** Each full run at `repeat: 3` costs roughly $0.10–$0.30 for `gpt-5.1` and less for smaller models. Run comparisons locally; CI uses a single-provider config (added in a later PR).
 
 ## Docs
 
