@@ -1,0 +1,86 @@
+# Rule-based eval cases. Each entry exercises one major rule in the prompt.
+# Real mosque snapshots are added in PR 3 (cases/real/).
+
+- vars:
+    text: "file://cases/simple_day.txt"
+    today: "2026-10-15"
+    expected: "file://cases/simple_day.expected.json"
+  description: "simple_day: all 5 prayers with start + iqamah, no Jummah"
+  tags: [rule]
+
+- vars:
+    text: "file://cases/monthly_calendar.txt"
+    today: "2026-10-16"
+    expected: "file://cases/monthly_calendar.expected.json"
+  description: "monthly_calendar: multi-day table — extract today's row only"
+  tags: [rule]
+
+- vars:
+    text: "file://cases/repeated_undated.txt"
+    today: "2026-10-15"
+    expected: "file://cases/repeated_undated.expected.json"
+  description: "repeated_undated: same block repeated 3 times with no dates — use first"
+  tags: [rule]
+
+- vars:
+    text: "file://cases/single_time.txt"
+    today: "2026-10-15"
+    expected: "file://cases/single_time.expected.json"
+  description: "single_time: one time per prayer — all go to _iqamah, _start = null"
+  tags: [rule]
+
+- vars:
+    text: "file://cases/sunset_maghrib.txt"
+    today: "2026-10-15"
+    expected: "file://cases/sunset_maghrib.expected.json"
+  description: "sunset_maghrib: Maghrib listed as 'Sunset' — both fields null"
+  tags: [rule]
+
+- vars:
+    text: "file://cases/glued_times.txt"
+    today: "2026-10-16"
+    expected: "file://cases/glued_times.expected.json"
+  description: "glued_times: Jummah times joined to words (Khutbah1:30PM Iqamah2:00PM)"
+  tags: [rule]
+
+- vars:
+    text: "file://cases/split_times.txt"
+    today: "2026-10-15"
+    expected: "file://cases/split_times.expected.json"
+  description: "split_times: time broken across lines (7\\n:50 PM)"
+  tags: [rule]
+
+- vars:
+    text: "file://cases/numbered_jummah.txt"
+    today: "2026-10-16"
+    expected: "file://cases/numbered_jummah.expected.json"
+  description: "numbered_jummah: '1st / 2nd / 3rd Jumu'ah' labels — each is its own iqamah"
+  tags: [rule]
+
+- vars:
+    text: "file://cases/khutbah_iqamah.txt"
+    today: "2026-10-16"
+    expected: "file://cases/khutbah_iqamah.expected.json"
+  description: "khutbah_iqamah: 'Khutbah X:XX PM, Iqamah Y:YY PM' pairs on same line"
+  tags: [rule]
+
+- vars:
+    text: "file://cases/unlabelled_jummah.txt"
+    today: "2026-10-16"
+    expected: "file://cases/unlabelled_jummah.expected.json"
+  description: "unlabelled_jummah: unlabelled time near labeled Jumu'ah slots — each time is its own iqamah"
+  tags: [rule]
+
+- vars:
+    text: "file://cases/no_jummah.txt"
+    today: "2026-10-15"
+    expected: "file://cases/no_jummah.expected.json"
+  description: "no_jummah: no times in 12-5 PM range — all Jummah fields null"
+  tags: [rule]
+
+- vars:
+    text: "file://cases/odd_formats.txt"
+    today: "2026-10-15"
+    expected: "file://cases/odd_formats.expected.json"
+  description: "odd_formats: lowercase am/pm and dotted p.m. — clean_text normalizes before LLM sees text"
+  tags: [rule]

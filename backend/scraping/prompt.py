@@ -39,6 +39,10 @@ PROMPT_TEMPLATE = """
                 - Jummmah (Friday) prayer can have up to 3 slots: jummah1, jummah2, jummah3.
                 - Jummah (Friday) prayer times:
                     - After assigning Fajr, Zuhr, Asr, Maghrib, and Isha, re-check the text for any times between 12:00 PM and 5:00 PM.
+                    - ⚠️ NEVER reuse a time already assigned to Fajr, Zuhr, Asr, Maghrib or Isha as a Jummah time.
+                    - ⚠️ Only fill Jummah fields if the text explicitly mentions Jummah / Jumu'ah / Jumuah / Friday prayer / Khutbah,
+                    or has unlabelled 12-5 PM times directly adjacent to those words. If none of those words appear,
+                    set every Jummah field to null — even if TODAY'S DATE is a Friday.
                     - ALL times in that range, near other jummah timings, must be treated as Jummah times, even if not labeled with the word "Jummah" or
                     it's alternate spellings.
                     - PRIORITY RULE — Numbered slot labels (apply BEFORE the count-based pairing rule below):

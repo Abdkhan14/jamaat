@@ -110,6 +110,29 @@ cd frontend
 npm test
 ```
 
+## Evals
+
+LLM evals score the `scraped text → prayer times JSON` step using [promptfoo](https://www.promptfoo.dev/). They call the real OpenAI API and cost a few cents per run (~12 cases × 3 repeats = 36 calls against `gpt-5.1`).
+
+### Run locally
+
+```bash
+cd backend
+PYTHONPATH=. PROMPTFOO_PYTHON=.venv/bin/python \
+  npx promptfoo@0.124.1 eval -c evals/promptfooconfig.yaml
+npx promptfoo@0.124.1 view   # opens a local results grid
+```
+
+### Compare two prompts or models
+
+1. Add a candidate prompt function to `backend/evals/prompts.py` alongside `current`, or uncomment the second provider block in `evals/promptfooconfig.yaml` and set a model name.
+2. Run as above — the results grid shows one column per prompt/model combination.
+
+### Add a case
+
+1. Add `evals/cases/<name>.txt` (the raw scraped text) and `evals/cases/<name>.expected.json` (the 16 correct fields).
+2. Add an entry to `evals/cases.yaml` with `text`, `today`, `expected`, and a `tags` list.
+
 ## Docs
 
 [`docs/backend.md`](docs/backend.md) — End-to-end walkthrough of the backend: scraping, LLM extraction, database, API routes, scheduler, and deployment.
