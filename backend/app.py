@@ -6,6 +6,10 @@ from dotenv import load_dotenv
 # the OpenAI client at import time from os.environ["OPENAI_API_KEY"]).
 load_dotenv()
 
+from observability import init_sentry
+
+init_sentry()
+
 from flask import Flask
 from flask_cors import CORS
 
