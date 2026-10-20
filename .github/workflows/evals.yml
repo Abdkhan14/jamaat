@@ -1,0 +1,58 @@
+name: Evals
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write  # label removal uses the issues API
+
+jobs:
+  evals:
+    if: github.event.label.name == 'run-evals'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: pip install -q -r requirements.txt
+
+      - name: Run evals
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PYTHONPATH: .
+          PROMPTFOO_PYTHON: python
+        run: |
+          set +e
+          npx -y promptfoo@0.124.1 eval -c evals/promptfooconfig.yaml -o results.json
+          code=$?
+          # exit 100 means some cases failed — reported in the comment, not fatal
+          if [ $code -ne 0 ] && [ $code -ne 100 ]; then exit $code; fi
+
+      - name: Post summary comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python evals/summarize.py results.json "$RUN_URL" > comment.md
+          gh pr comment ${{ github.event.pull_request.number }} --body-file comment.md
+
+      - name: Remove label
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr edit ${{ github.event.pull_request.number }} --remove-label run-evals

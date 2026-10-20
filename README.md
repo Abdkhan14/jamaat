@@ -125,6 +125,12 @@ npx promptfoo@0.124.1 view   # opens a local results grid
 
 After the run, the CLI summary table shows total tokens and estimated cost. The `promptfoo view` grid shows per-provider token counts and cost. Prices are set in `evals/promptfooconfig.yaml` under `input_price_per_mtok` / `output_price_per_mtok` and must be updated by hand if OpenAI changes its rates.
 
+### Run on a PR
+
+Add the `run-evals` label to any PR. A GitHub Actions job runs the suite and posts a comment with a pass/fail table, cost, and token count. The label is removed automatically — add it again to re-run.
+
+Requires the `OPENAI_API_KEY` repository secret (Settings → Secrets and variables → Actions).
+
 ### Compare two prompts or models
 
 1. Add a candidate prompt function to `backend/evals/prompts.py` alongside `current`, or uncomment the second provider block in `evals/promptfooconfig.yaml` and set a model name.
