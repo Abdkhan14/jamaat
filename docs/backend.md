@@ -56,6 +56,8 @@ flowchart TD
 | `scraping/llm.py`             | OpenAI client, `call_llm` — call GPT and parse JSON response                      |
 | `scraping/parsing.py`         | `format_time`, `normalize_prayer_times`, prayer name constants                     |
 | `scraping/pipeline.py`        | `process_mosque`, `run_all`, `scrape_and_update` — orchestrates the full pipeline  |
+| `scraping/errors.py`          | `MosqueScrapeError`, `ScrapeJobFailed` and failure stage names                     |
+| `observability.py`            | `init_sentry`, `mosque_scope` — Sentry setup and per-mosque tagging                |
 | `Dockerfile`                  | Container image (python:3.12-slim), gunicorn entry point                           |
 | `fly.toml`                    | Fly.io deployment: region, volume mount, machine settings                          |
 | `requirements.txt`            | Python dependencies                                                                |
@@ -486,6 +488,10 @@ The scheduler calls this synchronous function in its own thread. It creates a Fl
 
 In almost every failure scenario the outcome is the same: **the existing database row is kept** and the frontend continues to show yesterday's data.
 
+### Monitoring (Sentry)
+
+Every failure above (except the unchanged-hash skip) is reported to Sentry as an issue tagged with the `mosque`, and successful mosques are still committed. After the commit, the run raises `ScrapeJobFailed` if any mosque failed, which marks the `daily-mosque-scrape` cron check-in as failed. Each run is one trace: the check-in, per-mosque spans, OpenAI calls, errors and all `logging` output (sent as Sentry Logs) share its trace ID. The `Scrape job finished` log carries `scrape.total`, `scrape.updated`, `scrape.skipped_unchanged`, `scrape.failed` and `scrape.failed_mosques`.
+
 ---
 
 
@@ -533,6 +539,9 @@ One worker is deliberate. Multiple workers would each start their own scheduler,
 | `ALLOWED_ORIGINS`    | No       | Comma-separated CORS origins (default: `http://localhost:5173`)                     |
 | `GSHEET_WEBHOOK_URL` | No       | Google Sheets webhook for mosque requests; `/mosque-request` returns 503 without it |
 | `PORT`               | No       | Port gunicorn binds to (default: `8080` via fly.toml)                               |
+| `SENTRY_DSN`         | No       | Sentry project DSN (Fly secret in prod); Sentry is disabled when unset              |
+| `SENTRY_ENVIRONMENT` | No       | Sentry environment (default: `development`; `production` via fly.toml)              |
+| `SENTRY_RELEASE`     | No       | Release tag on events; baked into the image as the git SHA by the deploy workflow   |
 
 
 ---
@@ -569,7 +578,7 @@ curl http://localhost:5000/health
 
 These are factual observations about the current code, not bugs to fix immediately.
 
-1. **Missing Jummah key causes a** `KeyError` — In `process_mosque` (`scraping/pipeline.py`), Jummah fields are accessed with direct dict keys (no `.get()`). If the LLM omits any `jummah*` key from its JSON, a `KeyError` is raised. Because `asyncio.gather` is called without `return_exceptions=True`, a single mosque's error will bubble up and **prevent all mosques from being saved** in that run.
+1. **Missing Jummah key causes a** `KeyError` — In `to_prayer_fields` (`scraping/parsing.py`), Jummah fields are accessed with direct dict keys (no `.get()`). If the LLM omits any `jummah*` key from its JSON, a `KeyError` is raised. `process_mosque` reports it to Sentry as a `crash` failure for that mosque only; the other mosques are still saved.
 2. **Debug file left in production** — For "Masjid Al-Abedeen", the full prompt is written to `prompt_abedeen.txt` on every run where the content has changed. This file is excluded by `.dockerignore` but still gets written inside the running container.
 3. **Stale** `date` **on hash-skip** — When a mosque's content hash is unchanged, its row is not written. The `date` column stays set to whenever the content last changed, not today's date. The frontend receives an older `date` value even if the times are still accurate.
 
