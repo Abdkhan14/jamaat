@@ -24,7 +24,7 @@ FIELDS = (
 INVALID_JSON_SENTINEL = "INVALID_JSON"
 
 
-def get_score(output: str, context: dict) -> dict:
+def get_assert(output: str, context: dict) -> dict:
     expected_raw = json.loads(context["vars"]["expected"])
 
     if output == INVALID_JSON_SENTINEL:
