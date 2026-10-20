@@ -8,6 +8,10 @@ TIME_PATTERN = re.compile(r"\d{1,2}:\d{2}\s*[apAP]\.?[mM]")
 def clean_text(raw):
     text = re.sub(r"[\n\t]+", " ", raw)
     text = re.sub(r"\s{2,}", " ", text)
+    # Normalize dotted AM/PM variants (e.g. "p.m." → "PM") before the
+    # punctuation-space step below would split them into "p. m."
+    text = re.sub(r"\b[aA]\.[mM]\.", "AM", text)
+    text = re.sub(r"\b[pP]\.[mM]\.", "PM", text)
     text = re.sub(r"([,.:])([^\s])", r"\1 \2", text)
     text = re.sub(r"(\d{1,2})\s*:\s*(\d{2})", r"\1:\2", text)
     text = re.sub(r"(\d{1,2}:\d{2})([apAP][mM])", r"\1 \2", text)

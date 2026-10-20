@@ -82,5 +82,5 @@
     text: "file://cases/odd_formats.txt"
     today: "2026-10-15"
     expected: "file://cases/odd_formats.expected.json"
-  description: "odd_formats: 'p.m.' with dots — documents a known pipeline parse limitation"
-  tags: [rule, known_failure]
+  description: "odd_formats: lowercase am/pm and dotted p.m. — clean_text normalizes before LLM sees text"
+  tags: [rule]

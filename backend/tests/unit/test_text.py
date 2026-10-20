@@ -13,3 +13,9 @@ def test_collapses_whitespace_and_adds_space_after_punctuation():
 def test_repairs_broken_times():
     assert "6:30 pm" in clean_text("6 : 30pm")
     assert "6:30 pm" in clean_text("6:30 p m")
+
+
+def test_normalizes_dotted_ampm():
+    assert "7:50 PM" in clean_text("7:50 p.m.")
+    assert "6:00 AM" in clean_text("6:00 a.m.")
+    assert "8:05 PM" in clean_text("8:05 P.M.")
