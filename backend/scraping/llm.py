@@ -30,7 +30,7 @@ def parse_completion(response) -> dict | None:
     """Extract and JSON-parse the content from a completion response."""
     try:
         return json.loads(response.choices[0].message.content)
-    except (json.JSONDecodeError, Exception):
+    except Exception:
         return None
 
 
