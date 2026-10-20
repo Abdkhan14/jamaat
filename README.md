@@ -112,7 +112,7 @@ npm test
 
 ## Evals
 
-LLM evals score the `scraped text → prayer times JSON` step using [promptfoo](https://www.promptfoo.dev/). They call the real OpenAI API and cost a few cents per run (~12 cases × 3 repeats = 36 calls against `gpt-5.1`).
+LLM evals score the `scraped text → prayer times JSON` step using [promptfoo](https://www.promptfoo.dev/). They call the real OpenAI API (~12 cases × 3 repeats = 36 calls against `gpt-5.1` per run).
 
 ### Run locally
 
@@ -122,6 +122,8 @@ PYTHONPATH=. PROMPTFOO_PYTHON=.venv/bin/python \
   npx promptfoo@0.124.1 eval -c evals/promptfooconfig.yaml
 npx promptfoo@0.124.1 view   # opens a local results grid
 ```
+
+After the run, the CLI summary table shows total tokens and estimated cost. The `promptfoo view` grid shows per-provider token counts and cost. Prices are set in `evals/promptfooconfig.yaml` under `input_price_per_mtok` / `output_price_per_mtok` and must be updated by hand if OpenAI changes its rates.
 
 ### Compare two prompts or models
 

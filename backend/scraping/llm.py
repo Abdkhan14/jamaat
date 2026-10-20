@@ -12,22 +12,35 @@ SYSTEM_MESSAGE = "You are a helpful assistant that only outputs valid JSON objec
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 
-def call_llm(prompt: str, model: str = OPENAI_MODEL):
+def request_completion(prompt: str, model: str = OPENAI_MODEL):
+    """Send the prompt and return the raw OpenAI response (including usage)."""
+    return client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": SYSTEM_MESSAGE},
+            {"role": "user", "content": prompt},
+        ],
+        max_completion_tokens=MAX_COMPLETION_TOKENS,
+        top_p=1,
+        timeout=LLM_TIMEOUT,
+    )
+
+
+def parse_completion(response) -> dict | None:
+    """Extract and JSON-parse the content from a completion response."""
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": SYSTEM_MESSAGE},
-                {"role": "user", "content": prompt},
-            ],
-            max_completion_tokens=MAX_COMPLETION_TOKENS,
-            top_p=1,
-            timeout=LLM_TIMEOUT,
-        )
+        return json.loads(response.choices[0].message.content)
+    except (json.JSONDecodeError, Exception):
+        return None
 
-        choice = response.choices[0].message.content
-        return json.loads(choice)
 
+def call_llm(prompt: str, model: str = OPENAI_MODEL) -> dict | None:
+    try:
+        response = request_completion(prompt, model=model)
+        result = parse_completion(response)
+        if result is None:
+            print("[OpenAI] Response was not valid JSON")
+        return result
     except Exception as e:
         print(f"[OpenAI] Failed: {e}")
         return None
