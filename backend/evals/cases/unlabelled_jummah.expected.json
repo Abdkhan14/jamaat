@@ -9,10 +9,10 @@
   "maghrib_iqamah": "7:54 PM",
   "isha_start": "9:30 PM",
   "isha_iqamah": "10:00 PM",
-  "jummah1_start": "1:15 PM",
-  "jummah1_iqamah": "2:15 PM",
+  "jummah1_start": null,
+  "jummah1_iqamah": "1:15 PM",
   "jummah2_start": null,
-  "jummah2_iqamah": "3:30 PM",
+  "jummah2_iqamah": "2:15 PM",
   "jummah3_start": null,
-  "jummah3_iqamah": null
+  "jummah3_iqamah": "3:30 PM"
 }

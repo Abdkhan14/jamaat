@@ -68,7 +68,7 @@
     text: "file://cases/unlabelled_jummah.txt"
     today: "2026-10-16"
     expected: "file://cases/unlabelled_jummah.expected.json"
-  description: "unlabelled_jummah: unlabelled time in 12-5 PM range near labeled Jumu'ah slots"
+  description: "unlabelled_jummah: unlabelled time near labeled Jumu'ah slots — each time is its own iqamah"
   tags: [rule]
 
 - vars:
