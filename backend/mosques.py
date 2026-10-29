@@ -24,6 +24,7 @@ MOSQUES = [
     {
         "name": "The Sunatul Jamaat",
         "address": "347 Danforth Rd, Scarborough, ON M1L 3X8",
+        "scrape_url": "https://r.jina.ai/https://crm.mapplehost.com/prayer-times?mosque_id=1",
         "website": "https://www.sunatuljamaat.com/",
         "latitude": 43.70370861787685,
         "longitude": -79.26959493102808,
