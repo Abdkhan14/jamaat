@@ -25,6 +25,13 @@ MOSQUES = [
         "name": "The Sunatul Jamaat",
         "address": "347 Danforth Rd, Scarborough, ON M1L 3X8",
         "scrape_url": "https://r.jina.ai/https://crm.mapplehost.com/prayer-times?mosque_id=1",
+        # Without these, Jina can return a cached snapshot taken before the
+        # page's JavaScript fills in the prayer-times table.
+        "scrape_headers": {
+            "X-No-Cache": "true",
+            "X-Wait-For-Selector": "#prayer-rows tr",
+            "X-Timeout": "15",
+        },
         "website": "https://www.sunatuljamaat.com/",
         "latitude": 43.70370861787685,
         "longitude": -79.26959493102808,

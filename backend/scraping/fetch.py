@@ -13,13 +13,13 @@ HTTPX_TIMEOUT = 20
 logger = logging.getLogger(__name__)
 
 
-def fetch_page_text(url: str) -> str:
+def fetch_page_text(url: str, headers: dict[str, str] | None = None) -> str:
     # NOTE: Some mosque WAFs (e.g. irccan.com) block requests that claim to be
     # a browser via a spoofed User-Agent but lack a matching browser TLS
     # fingerprint. A plain client with a consistent fingerprint is served
     # normally, so we intentionally do NOT send browser-spoofing headers here.
     with httpx.Client(timeout=HTTPX_TIMEOUT, follow_redirects=True) as http_client:
-        response = http_client.get(url)
+        response = http_client.get(url, headers=headers)
         response.raise_for_status()
 
     soup = BeautifulSoup(response.text, "html.parser")
@@ -33,7 +33,7 @@ def fetch_via_requests(mosque, retries: int = 3, backoff: float = 3.0):
     with mosque_scope(mosque["name"], op="scrape.fetch"):
         for attempt in range(1, retries + 1):
             try:
-                text = fetch_page_text(url)
+                text = fetch_page_text(url, mosque.get("scrape_headers"))
             except Exception as e:
                 if attempt == retries:
                     logger.error(
