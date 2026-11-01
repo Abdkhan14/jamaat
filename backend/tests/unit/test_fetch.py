@@ -25,6 +25,14 @@ def test_uses_scrape_url_over_website(known_mosque):
     assert result is not None
 
 
+def test_sends_scrape_headers(known_mosque):
+    mosque = {**known_mosque, "scrape_headers": {"X-No-Cache": "true"}}
+    with respx.mock:
+        route = respx.get(mosque["scrape_url"]).mock(return_value=httpx.Response(200, text="<p>times</p>"))
+        fetch_via_requests(mosque)
+    assert route.calls.last.request.headers["X-No-Cache"] == "true"
+
+
 def test_retries_then_returns_none(known_mosque):
     with respx.mock, patch("scraping.fetch.time.sleep") as mock_sleep:
         respx.get(known_mosque["scrape_url"]).mock(side_effect=httpx.ConnectError("timeout"))
