@@ -57,6 +57,12 @@ PROMPT_TEMPLATE = """
                             - slot-3 label → jummah3_iqamah
                           Set jummahN_start = null UNLESS that time is also explicitly preceded by
                           "Khutbah" / "Adhan" / "Azan" / "Begins" (in which case the start/iqamah pairing applies for that single slot).
+                        * The numbered label may appear BEFORE its time ("Jumuah 1 1:00 PM") OR AFTER it
+                          as a caption ("12:30 PM Jumuah 1 1:25 PM Jumuah 2 2:10 PM Jumuah 3"). In either
+                          layout, map each time to the slot number that is closest to it. Never pair two
+                          numbered-label times into one slot's start + iqamah.
+                        * A bare "Jumuah" / "Jummah" / "Jumu'ah" with NO number is a section heading, not a
+                          slot label. Ignore it when looking for numbered labels.
                         * SKIP the "2–5 times → pairs" distribution rule entirely when numbered slot labels are present.
                     - Count-based pairing (only applies when numbered slot labels are NOT present):
                         * 1 time → jummah1_iqamah only (start = null).

@@ -84,3 +84,10 @@
     expected: "file://cases/odd_formats.expected.json"
   description: "odd_formats: lowercase am/pm and dotted p.m. — clean_text normalizes before LLM sees text"
   tags: [rule]
+
+- vars:
+    text: "file://cases/trailing_jummah_labels.txt"
+    today: "2026-11-10"
+    expected: "file://cases/trailing_jummah_labels.expected.json"
+  description: "trailing_jummah_labels: numbered Jumuah labels follow their times (athanplus widget)"
+  tags: [rule]
