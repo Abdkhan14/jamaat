@@ -37,6 +37,25 @@ def normalize_prayer_times(prayer_json):
             prayer_json.get(start_key), prayer_json.get(iqamah_key)
         )
 
+    # Sort Jummah slots by time (iqamah first, fall back to start), nulls last.
+    # This corrects any out-of-order assignment the LLM may have made and also
+    # ensures missing keys from the LLM become None rather than raising KeyError.
+    def _slot_sort_key(slot_pair):
+        start_str, iqamah_str = slot_pair
+        t = format_time(iqamah_str) or format_time(start_str)
+        # Slots with no time sort after all timed slots
+        return (0, t) if t else (1, None)
+
+    slots = [
+        (prayer_json.get(f"jummah{n}_start"), prayer_json.get(f"jummah{n}_iqamah"))
+        for n in (1, 2, 3)
+    ]
+    slots.sort(key=_slot_sort_key)
+
+    for n, (start_val, iqamah_val) in enumerate(slots, start=1):
+        prayer_json[f"jummah{n}_start"] = start_val
+        prayer_json[f"jummah{n}_iqamah"] = iqamah_val
+
     return prayer_json
 
 

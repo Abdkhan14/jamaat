@@ -50,13 +50,14 @@ def test_process_mosque_rejects_all_null_daily_times(app_ctx, fake_llm, llm_resp
 
 
 def test_process_mosque_wraps_unexpected_errors(app_ctx, fake_llm, llm_response):
+    """Any unexpected exception inside process_mosque is re-raised as STAGE_CRASH."""
     from scraping.errors import STAGE_CRASH, MosqueScrapeError
     from scraping.pipeline import process_mosque
-    del llm_response["jummah1_start"]
     fake_llm.return_value = llm_response
 
-    with pytest.raises(MosqueScrapeError) as exc_info:
-        asyncio.run(process_mosque(_make_result()))
+    with patch("scraping.pipeline.to_prayer_fields", side_effect=RuntimeError("boom")):
+        with pytest.raises(MosqueScrapeError) as exc_info:
+            asyncio.run(process_mosque(_make_result()))
     assert exc_info.value.stage == STAGE_CRASH
 
 
