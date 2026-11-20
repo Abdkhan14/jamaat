@@ -224,9 +224,11 @@ The `PROMPT_TEMPLATE` is long and detailed. Here's what it tells the model:
 
 - Any time between 12:00 PM and 5:00 PM that appears near other Jummah times counts as a Jummah time, even if not labeled.
 - Up to 3 slots: `jummah1`, `jummah2`, `jummah3`.
-- **Numbered slot labels take priority:** if labels like "1st Jamat", "Jumuah 2" etc. are present, map them directly (slot 1 → `jummah1_iqamah`, etc.).
+- **Same-value collision:** a time printed inside the Jummah section is always a Jummah time, even when its value matches a daily prayer time (e.g. Baitul Mukarram's 1:00 PM appears as both the Dhuhr iqamah row and again inside the Jumuah section). The model is told to treat the section-level occurrence as Jummah and not to suppress it.
+- **Numbered slot labels take priority:** if labels like "1st Jamat", "Jumuah 2" etc. are present, map them directly (slot 1 → `jummah1_iqamah`, etc.). Labels may come before their time (leading) or after (trailing). The model detects which layout the whole section uses and applies it consistently — every time in the section gets exactly one slot with nothing dropped.
 - **Count-based pairing** (when no numbered labels): 1 time → `jummah1_iqamah` only; 2–5 times → pair left-to-right as start/iqamah; 6 times → 3 full pairs.
 - Khutbah time always maps to `_start`; Iqamah time always maps to `_iqamah`.
+- Slots are numbered in ascending time order: `jummah1` is always the earliest.
 
 
 
@@ -280,6 +282,8 @@ After the LLM returns its JSON, each prayer's pair of times is checked with `nor
 | Only `_start` is non-null                           | Move value to `_iqamah`, set `_start = null` |
 | Only `_iqamah` is non-null                          | Leave as-is                                  |
 | Both null                                           | Leave as-is                                  |
+
+After normalizing daily prayers, `normalize_prayer_times` also **sorts the three Jummah slots** in ascending time order (using iqamah as the sort key, falling back to start, with empty slots last). This corrects any out-of-order assignment the LLM may have made — for example when "Jumuah 1" in the trailing-label layout confused the model into placing 1:00 PM into `jummah3_iqamah`. Jummah keys are read with `.get()` so a missing key becomes `None` rather than raising `KeyError`.
 
 
 
@@ -578,7 +582,6 @@ curl http://localhost:5000/health
 
 These are factual observations about the current code, not bugs to fix immediately.
 
-1. **Missing Jummah key causes a** `KeyError` — In `to_prayer_fields` (`scraping/parsing.py`), Jummah fields are accessed with direct dict keys (no `.get()`). If the LLM omits any `jummah*` key from its JSON, a `KeyError` is raised. `process_mosque` reports it to Sentry as a `crash` failure for that mosque only; the other mosques are still saved.
-2. **Debug file left in production** — For "Masjid Al-Abedeen", the full prompt is written to `prompt_abedeen.txt` on every run where the content has changed. This file is excluded by `.dockerignore` but still gets written inside the running container.
-3. **Stale** `date` **on hash-skip** — When a mosque's content hash is unchanged, its row is not written. The `date` column stays set to whenever the content last changed, not today's date. The frontend receives an older `date` value even if the times are still accurate.
+1. **Debug file left in production** — For "Masjid Al-Abedeen", the full prompt is written to `prompt_abedeen.txt` on every run where the content has changed. This file is excluded by `.dockerignore` but still gets written inside the running container.
+2. **Stale** `date` **on hash-skip** — When a mosque's content hash is unchanged, its row is not written. The `date` column stays set to whenever the content last changed, not today's date. The frontend receives an older `date` value even if the times are still accurate.
 

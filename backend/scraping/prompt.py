@@ -39,7 +39,11 @@ PROMPT_TEMPLATE = """
                 - Jummmah (Friday) prayer can have up to 3 slots: jummah1, jummah2, jummah3.
                 - Jummah (Friday) prayer times:
                     - After assigning Fajr, Zuhr, Asr, Maghrib, and Isha, re-check the text for any times between 12:00 PM and 5:00 PM.
-                    - ⚠️ NEVER reuse a time already assigned to Fajr, Zuhr, Asr, Maghrib or Isha as a Jummah time.
+                    - ⚠️ Do NOT carry over a time from a daily prayer's OWN row into Jummah (e.g. if "Dhuhr 12:03 PM 1:00 PM" appears
+                    in the daily prayer section, do not treat the 1:00 PM from that row as a Jummah time).
+                    However, if the SAME time value (e.g. 1:00 PM) appears again inside the dedicated Jummah section of the text
+                    (e.g. "Jumuah 1:00 PM Jumuah 1"), treat it as a Jummah time — it is a separate occurrence that coincidentally
+                    has the same value as a daily prayer.
                     - ⚠️ Only fill Jummah fields if the text explicitly mentions Jummah / Jumu'ah / Jumuah / Friday prayer / Khutbah,
                     or has unlabelled 12-5 PM times directly adjacent to those words. If none of those words appear,
                     set every Jummah field to null — even if TODAY'S DATE is a Friday.
@@ -58,12 +62,19 @@ PROMPT_TEMPLATE = """
                           Set jummahN_start = null UNLESS that time is also explicitly preceded by
                           "Khutbah" / "Adhan" / "Azan" / "Begins" (in which case the start/iqamah pairing applies for that single slot).
                         * The numbered label may appear BEFORE its time ("Jumuah 1 1:00 PM") OR AFTER it
-                          as a caption ("12:30 PM Jumuah 1 1:25 PM Jumuah 2 2:10 PM Jumuah 3"). In either
-                          layout, map each time to the slot number that is closest to it. Never pair two
-                          numbered-label times into one slot's start + iqamah.
+                          as a caption. Determine the layout for the whole Jummah section at once:
+                          - TRAILING layout: the first token after the bare "Jumuah" heading is a time, and
+                            numbered labels come after each time (e.g. "Jumuah 1:00 PM Jumuah 1 1:45 PM Jumuah 2 2:30 PM Jumuah 3").
+                            In this layout the label belongs to the time just BEFORE it.
+                            Example: 1:00 PM → jummah1_iqamah, 1:45 PM → jummah2_iqamah, 2:30 PM → jummah3_iqamah.
+                          - LEADING layout: numbered labels come before their time ("Jumuah 1 1:00 PM Jumuah 2 1:45 PM").
+                            In this layout the label belongs to the time just AFTER it.
+                          Never pair two numbered-label times into one slot's start + iqamah.
+                          Every time in the Jummah section gets exactly one slot — do not drop any time.
                         * A bare "Jumuah" / "Jummah" / "Jumu'ah" with NO number is a section heading, not a
                           slot label. Ignore it when looking for numbered labels.
                         * SKIP the "2–5 times → pairs" distribution rule entirely when numbered slot labels are present.
+                        * Slots are always numbered in ascending time order: jummah1 is the earliest, jummah3 is the latest.
                     - Count-based pairing (only applies when numbered slot labels are NOT present):
                         * 1 time → jummah1_iqamah only (start = null).
                         * 2 to 5 times → assign left to right as start/iqamah pairs; if odd (3) or (5), last one is iqamah only.
