@@ -65,8 +65,14 @@ PROMPT_TEMPLATE = """
                           as a caption. Determine the layout for the whole Jummah section at once:
                           - TRAILING layout: the first token after the bare "Jumuah" heading is a time, and
                             numbered labels come after each time (e.g. "Jumuah 1:00 PM Jumuah 1 1:45 PM Jumuah 2 2:30 PM Jumuah 3").
-                            In this layout the label belongs to the time just BEFORE it.
-                            Example: 1:00 PM → jummah1_iqamah, 1:45 PM → jummah2_iqamah, 2:30 PM → jummah3_iqamah.
+                            In this layout the label belongs to the time just BEFORE it. The first time (the
+                            one right after the bare heading) is slot 1's iqamah — it is NOT a Khutbah or
+                            start time. This layout never provides Jummah start times, so every jummahN_start
+                            must be null.
+                            Example A (3 slots): "Jumuah 1:00 PM Jumuah 1 1:45 PM Jumuah 2 2:30 PM Jumuah 3"
+                              → jummah1_iqamah=1:00 PM, jummah2_iqamah=1:45 PM, jummah3_iqamah=2:30 PM, all starts null.
+                            Example B (3 slots): "Jumuah 12:30 PM Jumuah 1 1:25 PM Jumuah 2 2:10 PM Jumuah 3"
+                              → jummah1_iqamah=12:30 PM, jummah2_iqamah=1:25 PM, jummah3_iqamah=2:10 PM, all starts null.
                           - LEADING layout: numbered labels come before their time ("Jumuah 1 1:00 PM Jumuah 2 1:45 PM").
                             In this layout the label belongs to the time just AFTER it.
                           Never pair two numbered-label times into one slot's start + iqamah.

@@ -68,7 +68,7 @@ async def build_record(result):
         with open("prompt_abedeen.txt", "w", encoding="utf-8") as f:
             f.write(prompt)
 
-    fields = to_prayer_fields(llm_response_json)
+    fields = to_prayer_fields(llm_response_json, cleaned_text)
 
     daily_values = [fields[f"{p}_{slot}"] for p in DAILY_PRAYERS for slot in ("start", "iqamah")]
     if all(v is None for v in daily_values):
