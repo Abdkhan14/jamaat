@@ -98,3 +98,10 @@
     expected: "file://cases/jummah_matches_zuhr.expected.json"
   description: "jummah_matches_zuhr: Jumuah 1 time equals Dhuhr iqamah, labels trail times (Baitul Mukarram athanplus widget)"
   tags: [rule]
+
+- vars:
+    text: "file://cases/trailing_jummah_first_slot.txt"
+    today: "2026-11-23"
+    expected: "file://cases/trailing_jummah_first_slot.expected.json"
+  description: "trailing_jummah_first_slot: first time after bare Jumuah heading is slot 1 iqamah, not a start (Baitul Aman, Nov 23 prod failure)"
+  tags: [rule]

@@ -9,4 +9,4 @@ httpx
 beautifulsoup4
 gunicorn
 tzdata
-sentry-sdk
+sentry-sdk>=2.73,<3

@@ -229,6 +229,7 @@ The `PROMPT_TEMPLATE` is long and detailed. Here's what it tells the model:
 - **Count-based pairing** (when no numbered labels): 1 time → `jummah1_iqamah` only; 2–5 times → pair left-to-right as start/iqamah; 6 times → 3 full pairs.
 - Khutbah time always maps to `_start`; Iqamah time always maps to `_iqamah`.
 - Slots are numbered in ascending time order: `jummah1` is always the earliest.
+- **AthanPlus widget-layout override:** when `to_prayer_fields` is called with the `cleaned_text` argument (which `pipeline.py` and `evals/provider.py` both pass), the `extract_trailing_jummah` regex parser runs first. If it finds the AthanPlus trailing-label section ("Jumuah \<t1\> Jumuah 1 \<t2\> Jumuah 2 \<t3\> Jumuah 3") and all day-blocks in the page agree on the same times, its result replaces the LLM's Jummah keys before normalization. This eliminates the ~1% mis-pairing where the LLM treats the first time as a start time. The override logs "Jummah slots taken from widget layout" at info level (visible in Sentry Logs, tagged with the mosque name) whenever it corrects the LLM. It returns `None` for any other Jummah layout, leaving the LLM result unchanged.
 
 
 
@@ -284,6 +285,8 @@ After the LLM returns its JSON, each prayer's pair of times is checked with `nor
 | Both null                                           | Leave as-is                                  |
 
 After normalizing daily prayers, `normalize_prayer_times` also **sorts the three Jummah slots** in ascending time order (using iqamah as the sort key, falling back to start, with empty slots last). This corrects any out-of-order assignment the LLM may have made — for example when "Jumuah 1" in the trailing-label layout confused the model into placing 1:00 PM into `jummah3_iqamah`. Jummah keys are read with `.get()` so a missing key becomes `None` rather than raising `KeyError`.
+
+Note: the **widget-layout override** (see the Jummah rules section above) runs before this sort and before `normalize_prayer_times` itself, so for AthanPlus mosques the sort operates on already-correct data and is a no-op in practice.
 
 
 
